@@ -1,0 +1,1 @@
+Ganti GAS_WEB_APP_URL pada index.html dengan URL Web App Apps Script. Wrapper ini menempatkan aplikasi pada domain GitHub Pages dan menutup banner atas Web App di dalam frame.
