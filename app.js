@@ -81,7 +81,7 @@ async function api(action,payload={}){
   });
 }
 function demoFor(action,p){
-  if(action==='getBootstrapData')return {...demo,version:APP_VERSION};
+  if(action==='getBootstrapData')return {ok:true,...demo,version:APP_VERSION,source:'DEMO'};
   if(action==='getPICHistory')return {ok:true,rows:demo.pic};
   if(action==='validateAccess'){const role=String(p.role||'').toUpperCase();const codes={PIC:'PIC2026',PENGENDALI:'kendali2026',PIMPINAN:'kendali2026'};const good=String(p.code||'')===codes[role];return {ok:good,message:good?'Akses diterima.':'Kode akses tidak sesuai untuk peran yang dipilih.'};}
   if(action==='savePICInput'){demo.pic.unshift({...p});return {ok:true,message:'Data PIC tersimpan (mode demo).'};}
@@ -158,7 +158,7 @@ function docsView(){return `<div class="page-title"><div><h2>Dokumentasi</h2><p>
 
 function render(){const map={dashboard:dashboard,pic:picView,kendali:kendaliView,realisasi:realisasiView,monitoring:monitoringView,hambatan:hambatanView,action:actionView,risk:riskView,master:masterView,report:reportView,docs:docsView};document.getElementById('content').innerHTML=map[state.view]();document.querySelectorAll('.nav-item').forEach(x=>x.classList.toggle('active',x.dataset.view===state.view));}
 function showView(v){state.view=v;render();window.scrollTo({top:0,behavior:'smooth'})}
-async function loadAll(){const r=await api('getBootstrapData');if(r.ok){state.data=r;render();}else alert(r.message||'Data belum dapat dibaca.');}
+async function loadAll(){const r=await api('getBootstrapData');if(r&&r.ok){state.data=r;render();return true;}const msg=(r&&r.message)||'Data belum dapat dibaca.';console.error('ABT getBootstrapData:',r);alert(msg);return false;}
 async function savePIC(){
  const p={
   periode:document.getElementById('fPeriode').value,
@@ -220,4 +220,4 @@ state.data=demo;
 document.body.classList.add('locked');
 applyRoleUI();
 render();
-if(!DEMO_MODE&&API_URL){}
+// FINAL-2.3: mode demo tetap dapat dipakai untuk preview; produksi gunakan API_URL + DEMO_MODE=false.
