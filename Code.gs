@@ -1,12 +1,12 @@
 /*******************************************************
- SISTEM PENGENDALIAN ABT 2026 — FINAL-3.4
+ SISTEM PENGENDALIAN ABT 2026 — FINAL-2.2
  Backend: Google Apps Script + Google Sheets
  Frontend: GitHub Pages
 *******************************************************/
 const CFG = {
   SPREADSHEET_ID: '1kRLF6cqTeqdKHzUi7Gc4otlKRjAkzuUwSqPMK7DiEYY', // kosong jika script dibuat dari Spreadsheet ABT baru
   TZ: 'Asia/Jakarta',
-  VERSION: 'ABT-2026-FINAL-3.4',
+  VERSION: 'ABT-2026-FINAL-4.0',
   ACCESS_CODES: { PIC: 'PIC2026', PENGENDALI: 'kendali2026', PIMPINAN: 'kendali2026' }
 };
 
@@ -128,37 +128,27 @@ function doGet(e){
   const p=(e&&e.parameter)||{}; let out;
   try{
     if(!p.api) out={ok:true,version:CFG.VERSION,message:'ABT API aktif'};
-    else if(p.api==='validateAccess') {
-      const q=JSON.parse(p.payload||'{}');
-      const role=String(q.role||p.role||'').toUpperCase();
-      const code=String(q.code||p.code||'');
-      const expected=CFG.ACCESS_CODES[role]||'';
-      const good=!!expected && code===expected;
-      out={ok:good,role,message:good?'Akses diterima.':'Kode akses tidak sesuai untuk peran yang dipilih.'};
-    }
-    else if(p.api==='health') { const ss=ss_(); out={ok:true,version:CFG.VERSION,spreadsheet:ss.getName(),spreadsheetId:CFG.SPREADSHEET_ID,message:'ABT API aktif dan Spreadsheet terhubung.'}; }
-    else if(p.api==='setup') out=setup();
-    else if(p.api==='getBootstrapData') out=getBootstrapData();
+    else if(p.api==='validateAccess'){
+      const role=String(p.role||'').toUpperCase(), code=String(p.code||'');
+      const ok=!!CFG.ACCESS_CODES[role] && code===CFG.ACCESS_CODES[role];
+      out={ok,role,message:ok?'Akses diterima.':'Kode akses tidak sesuai untuk peran yang dipilih.'};
+    } else if(p.api==='getBootstrapData') out=getBootstrapData();
+    else if(p.api==='getPICContext') out=getPICContext_(p.id_kegiatan||'',p.periode||'');
     else if(p.api==='savePICInput') out=savePICInput_(JSON.parse(p.payload||'{}'));
-    else if(p.api==='updatePICInput') out=updatePICInput_(JSON.parse(p.payload||'{}'));
-    else if(p.api==='confirmPICInput') out=confirmPICInput_(JSON.parse(p.payload||'{}'));
-    else if(p.api==='deletePICInput') out=deletePICInput_(JSON.parse(p.payload||'{}'));
+    else if(p.api==='updatePICInput'){const q=JSON.parse(p.payload||'{}');q.id_input=p.id_input||q.id_input;q.code=p.code||q.code;out=updatePICInput_(q);}
+    else if(p.api==='confirmPICInput') out=confirmPICInput_({id_input:p.id_input,code:p.code});
+    else if(p.api==='deletePICInput') out=deletePICInput_({id_input:p.id_input,code:p.code});
     else if(p.api==='saveGeneric') out=saveGeneric_(p.key,JSON.parse(p.payload||'{}'));
     else if(p.api==='getReport') out=getBootstrapData();
     else out={ok:false,message:'API tidak dikenal.'};
-  }catch(err){Logger.log(err); out={ok:false,message:'Permintaan belum dapat diproses. Silakan coba lagi.'};}
+  }catch(err){out={ok:false,message:String(err&&err.message||err)};}
   const cb=String(p.callback||'').replace(/[^\w.$]/g,'');
-  if(cb) return ContentService.createTextOutput(cb+'('+JSON.stringify(out)+')').setMimeType(ContentService.MimeType.JAVASCRIPT);
+  if(cb)return ContentService.createTextOutput(cb+'('+JSON.stringify(out)+')').setMimeType(ContentService.MimeType.JAVASCRIPT);
   return ContentService.createTextOutput(JSON.stringify(out)).setMimeType(ContentService.MimeType.JSON);
 }
 
 function getBootstrapData(){
-  // Read-only endpoint: JANGAN melakukan setup/format/seed setiap Dashboard dibuka.
-  const ss=ss_();
-  const existingNames=ss.getSheets().map(sh=>sh.getName());
-  const required=Object.keys(SHEETS);
-  const missing=required.filter(k=>existingNames.indexOf(SHEET_NAMES[k])<0);
-  if(missing.length) throw new Error('Sheet database belum lengkap: '+missing.map(k=>SHEET_NAMES[k]).join(', ')+'. Jalankan fungsi setup() sekali dari Apps Script.');
+  setupSheets_(); seedRKK_();
   const kegiatan=rows_('KEGIATAN'), anggaran=rows_('ANGGARAN'), kebutuhan=rows_('KEBUTUHAN'), rencana=rows_('RENCANA'), pencairan=rows_('PENCAIRAN'), belanja=rows_('BELANJA'), monitoring=rows_('MONITORING'), hambatan=rows_('HAMBATAN'), action=rows_('ACTION'), risiko=rows_('RISIKO'), pic=rows_('PIC_INPUT');
   const pagu=anggaran.reduce((s,r)=>s+num_(r.jumlah_anggaran),0);
   const need=kebutuhan.reduce((s,r)=>s+num_(r.nilai_kebutuhan),0);
@@ -191,7 +181,7 @@ function getBootstrapData(){
     const real= num_(lm.realisasi_anggaran_kumulatif)||bl;
     const dev=target?pct_(Math.max(target-real,0),target):0;
     const status=deriveStatus_(dev, lm.realisasi_fisik_kumulatif, lm.target_fisik_kumulatif, k.status);
-    byAct[k.id_kegiatan]={id:k.id_kegiatan,kode:[k.kode_program,k.kode_kro,k.kode_ro].filter(Boolean).join('.'),nama:k.nama_kegiatan||'-',pagu:ag,real:bl,cair:pc,rencana:rp,target:target,pic:k.pic||lm.pic||latestPic[k.id_kegiatan]?.pic||'-',fisik:num_(lm.realisasi_fisik_kumulatif),status:status};
+    byAct[k.id_kegiatan]={id_kegiatan:k.id_kegiatan,kode:[k.kode_program,k.kode_kro,k.kode_ro].filter(Boolean).join('.'),nama:k.nama_kegiatan||'-',pagu:ag,real:bl,cair:pc,rencana:rp,target:target,pic:k.pic||lm.pic||latestPic[k.id_kegiatan]?.pic||'-',fisik:num_(lm.realisasi_fisik_kumulatif),status:status};
   });
   const activities=Object.values(byAct);
   const attention=activities.filter(x=>x.status!=='TERKENDALI').map(x=>({kode:x.kode,problem:x.status==='RISIKO TINGGI'?'Deviasi pengendalian memerlukan perhatian':'Realisasi belum sesuai target',impact:'Perlu tindak lanjut pada pelaksanaan dan monitoring',status:x.status}));
@@ -208,12 +198,12 @@ function getBootstrapData(){
   const hamb=hambatan.slice(-100).reverse().map(x=>({kode:codeById_(x.id_kegiatan,kegiatan),masalah:x.masalah,root:x.root_cause,dampak:x.dampak,level:x.tingkat_dampak,status:x.status}));
   const act=action.slice(-100).reverse().map(x=>({kode:codeById_(x.id_kegiatan,kegiatan),temuan:x.temuan,tindakan:x.tindakan,pic:x.pic,deadline:dateKey_(x.deadline),status:x.status}));
   const risk=risiko.slice(-100).reverse().map(x=>({kode:codeById_(x.id_kegiatan,kegiatan),risiko:x.risiko,penyebab:x.penyebab,prob:x.probabilitas,dampak:x.dampak,level:x.level_risiko,mitigasi:x.mitigasi,pic:x.pic,status:x.status}));
-  const picOut=pic.slice(-100).reverse().map(x=>({id_input:x.id_input,periode:x.periode,direktorat:x.direktorat,id_kegiatan:x.id_kegiatan,kode:codeById_(x.id_kegiatan,kegiatan),nama:nameById_(x.id_kegiatan,kegiatan),pic:x.pic,pagu:num_(x.pagu_abt),target:num_(x.target_anggaran_nominal),real:num_(x.realisasi_anggaran_nominal),outputTarget:num_(x.target_output_jumlah),outputReal:num_(x.realisasi_output_jumlah),status:x.status,kendala:x.kendala_utama,tindak:x.tindak_lanjut,deadline:dateKey_(x.deadline),confirmed:String(x.catatan_pembaku||'').toUpperCase()==='DIKONFIRMASI'}));
+  const picOut=pic.slice(-100).reverse().map(x=>({periode:x.periode,direktorat:x.direktorat,id_kegiatan:x.id_kegiatan,pic:x.pic,pagu:num_(x.pagu_abt),target:num_(x.target_anggaran_nominal),real:num_(x.realisasi_anggaran_nominal),outputTarget:num_(x.target_output_jumlah),outputReal:num_(x.realisasi_output_jumlah),status:x.status,kendala:x.kendala_utama,tindak:x.tindak_lanjut}));
+  const picInbox=pic.slice(-100).reverse().map(x=>{const k=kegiatan.find(z=>z.id_kegiatan===x.id_kegiatan)||{};return Object.assign({},x,{nama_kegiatan:k.nama_kegiatan||x.id_kegiatan,realisasi_anggaran_nominal:num_(x.realisasi_anggaran_nominal),target_anggaran_nominal:num_(x.target_anggaran_nominal)});});
 
-  return {ok:true,version:CFG.VERSION,summary:{pagu,kebutuhan:need,rencana:plan,cair,belanja:bel,sisa:pagu-bel,fisik,outputPct,targetOutput,realOutput},monthly,activities,attention,pic:picOut,kendali,realisasi,monitoring:monRows,hambatan:hamb,action:act,risk};
+  return {ok:true,version:CFG.VERSION,summary:{pagu,kebutuhan:need,rencana:plan,cair,belanja:bel,sisa:pagu-bel,fisik,outputPct,targetOutput,realOutput,picCount:pic.length,pendingPic:pic.filter(x=>x.status==='BELUM DIPERIKSA').length,confirmedPic:pic.filter(x=>x.status==='DIKONFIRMASI').length,attentionCount:attention.length},monthly,activities,attention,pic:picOut,picInbox,kendali,realisasi,monitoring:monRows,hambatan:hamb,action:act,risk};
 }
-function codeById_(id,list){const x=list.find(r=>String(r.id_kegiatan)===String(id));return x?[x.kode_program,x.kode_kro,x.kode_ro].filter(Boolean).join('.')||x.id_kegiatan:id||'-';}
-function nameById_(id,list){const x=list.find(r=>String(r.id_kegiatan)===String(id));return x?(x.nama_kegiatan||''):'';}
+function codeById_(id,list){const x=list.find(r=>r.id_kegiatan===id);return x?[x.kode_program,x.kode_kro,x.kode_ro].filter(Boolean).join('.'):'-';}
 function latestBy_(rows,key,dateField){const out={};rows.forEach(r=>{const id=r[key];if(!id)return;const d=String(r[dateField]||'');if(!out[id]||d>String(out[id][dateField]||''))out[id]=r;});return out;}
 function deriveStatus_(dev,realPhys,targetPhys,fallback){
   if(String(fallback||'').toUpperCase()==='KRITIS') return 'KRITIS';
@@ -230,123 +220,46 @@ function buildMonthly_(rencana,pencairan,belanja){
 }
 
 function savePICInput_(p){
-  const lock=LockService.getScriptLock();
-  lock.waitLock(15000);
-  try{
-    const ss=ss_();
-    const sh=ss.getSheetByName(SHEET_NAMES.PIC_INPUT);
-    if(!sh) throw new Error('PIC_INPUT sheet not found');
-
-    const id=uid_('PIC');
-    const row={
-      id_input:id,
-      timestamp:now_(),
-      periode:p.periode||'',
-      direktorat:p.direktorat||'',
-      id_kegiatan:p.id_kegiatan||'',
-      tujuan:p.tujuan||'',
-      sasaran:p.sasaran||'',
-      deadline:p.deadline||'',
-      pic:p.pic||'',
-      pagu_abt:num_(p.pagu),
-      target_anggaran_nominal:num_(p.target),
-      target_anggaran_persen:pct_(p.target,p.pagu),
-      realisasi_anggaran_nominal:num_(p.real),
-      realisasi_anggaran_persen:pct_(p.real,p.target),
-      deviasi_persen:pct_(Math.max(num_(p.target)-num_(p.real),0),p.target),
-      target_output_jumlah:num_(p.outputTarget),
-      target_output_persen:100,
-      realisasi_output_jumlah:num_(p.outputReal),
-      realisasi_output_persen:pct_(p.outputReal,p.outputTarget),
-      status:p.status||'TERKENDALI',
-      kendala_utama:p.kendala||'',
-      tindak_lanjut:p.tindak||'',
-      catatan_pembaku:'',
-      keterangan:'',
-      sumber_input:'PIC'
-    };
-
-    sh.appendRow(SHEETS.PIC_INPUT.map(x=>row[x]!==undefined?row[x]:''));
-    SpreadsheetApp.flush();
-    log_('CREATE','PIC_INPUT',id,row);
-    return {ok:true,id:id,message:'Data PIC berhasil disimpan.'};
-  }catch(err){
-    Logger.log(err);
-    return {ok:false,message:'Data PIC belum berhasil disimpan. Silakan coba lagi.'};
-  }finally{
-    lock.releaseLock();
-  }
-}
-function picRow_(id){
-  const sh=ss_().getSheetByName(SHEET_NAMES.PIC_INPUT);
-  if(!sh || sh.getLastRow()<2) return null;
-  const vals=sh.getRange(2,1,sh.getLastRow()-1,1).getValues();
-  for(let i=0;i<vals.length;i++) if(String(vals[i][0])===String(id)) return {sh:sh,row:i+2};
-  return null;
-}
-function updatePICInput_(p){
-  const lock=LockService.getScriptLock(); lock.waitLock(15000);
-  try{
-    const f=picRow_(p.id_input); if(!f) return {ok:false,message:'Data PIC tidak ditemukan.'};
-    const h=SHEETS.PIC_INPUT, r=f.sh.getRange(f.row,1,1,h.length).getValues()[0];
-    const o=Object.fromEntries(h.map((x,i)=>[x,r[i]]));
-    o.periode=p.periode||o.periode; o.direktorat=p.direktorat||o.direktorat; o.id_kegiatan=p.id_kegiatan||o.id_kegiatan; o.pic=p.pic||o.pic; o.deadline=p.deadline||o.deadline;
-    o.pagu_abt=num_(p.pagu); o.target_anggaran_nominal=num_(p.target); o.target_anggaran_persen=pct_(p.target,p.pagu); o.realisasi_anggaran_nominal=num_(p.real); o.realisasi_anggaran_persen=pct_(p.real,p.target); o.deviasi_persen=pct_(Math.max(num_(p.target)-num_(p.real),0),p.target); o.target_output_jumlah=num_(p.outputTarget); o.target_output_persen=100; o.realisasi_output_jumlah=num_(p.outputReal); o.realisasi_output_persen=pct_(p.outputReal,p.outputTarget); o.kendala_utama=p.kendala||''; o.tindak_lanjut=p.tindak||''; o.catatan_pembaku=''; o.keterangan='';
-    f.sh.getRange(f.row,1,1,h.length).setValues([h.map(x=>o[x]!==undefined?o[x]:'')]); SpreadsheetApp.flush(); log_('UPDATE','PIC_INPUT',p.id_input,p); return {ok:true,message:'Data PIC berhasil diperbarui.'};
-  }catch(err){Logger.log(err);return {ok:false,message:'Data PIC belum berhasil diperbarui. Silakan coba lagi.'};}finally{lock.releaseLock();}
-}
-function confirmPICInput_(p){
-  const lock=LockService.getScriptLock(); lock.waitLock(15000);
-  try{
-    const f=picRow_(p.id_input); if(!f) return {ok:false,message:'Data PIC tidak ditemukan.'};
-    const h=SHEETS.PIC_INPUT, cat=h.indexOf('catatan_pembaku')+1, ket=h.indexOf('keterangan')+1;
-    f.sh.getRange(f.row,cat).setValue('DIKONFIRMASI'); f.sh.getRange(f.row,ket).setValue('Dikonfirmasi '+now_()); SpreadsheetApp.flush(); log_('CONFIRM','PIC_INPUT',p.id_input,{status:'DIKONFIRMASI'}); return {ok:true,message:'Data PIC telah dikonfirmasi.'};
-  }catch(err){Logger.log(err);return {ok:false,message:'Data PIC belum dapat dikonfirmasi.'};}finally{lock.releaseLock();}
-}
-function deletePICInput_(p){
-  const lock=LockService.getScriptLock(); lock.waitLock(15000);
-  try{
-    const f=picRow_(p.id_input); if(!f) return {ok:false,message:'Data PIC tidak ditemukan.'};
-    f.sh.deleteRow(f.row); SpreadsheetApp.flush(); log_('DELETE','PIC_INPUT',p.id_input,{deleted:true}); return {ok:true,message:'Data PIC berhasil dihapus.'};
-  }catch(err){Logger.log(err);return {ok:false,message:'Data PIC belum berhasil dihapus.'};}finally{lock.releaseLock();}
+  setupSheets_();
+  const idK=String(p.id_kegiatan||''); if(!idK)return {ok:false,message:'Kegiatan wajib dipilih.'};
+  const ctx=getPICContext_(idK,p.periode||''); if(!ctx.ok)return ctx;
+  const pagu=ctx.finance.pagu, target=num_(p.target_anggaran_nominal), real=num_(p.realisasi_anggaran_nominal);
+  if(target<0||real<0)return {ok:false,message:'Nilai anggaran tidak boleh negatif.'};
+  if(real>pagu)return {ok:false,message:'Realisasi anggaran melebihi Pagu Kegiatan.'};
+  const targetOut=num_(p.target_output_jumlah), realOut=num_(p.realisasi_output_jumlah);
+  if(targetOut<0||realOut<0)return {ok:false,message:'Nilai output tidak boleh negatif.'};
+  if(realOut>targetOut&&targetOut>0)return {ok:false,message:'Realisasi output melebihi target periode.'};
+  const duplicate=rows_('PIC_INPUT').find(x=>x.id_kegiatan===idK&&String(x.periode)===String(p.periode||''));
+  if(duplicate)return {ok:false,message:'Data kegiatan untuk periode tersebut sudah ada. Pengendali dapat memperbarui data yang tersedia.'};
+  const row={id_input:uid_('PIC'),timestamp:now_(),periode:p.periode||'',direktorat:p.direktorat||'',id_kegiatan:idK,tujuan:ctx.master.tujuan||'',sasaran:ctx.master.sasaran||'',deadline:p.deadline||ctx.master.tanggal_selesai||'',pic:p.pic||ctx.master.pic||'',pagu_abt:pagu,target_anggaran_nominal:target,target_anggaran_persen:pct_(target,pagu),realisasi_anggaran_nominal:real,realisasi_anggaran_persen:pct_(real,pagu),deviasi_persen:Math.round((pct_(target,pagu)-pct_(real,pagu))*100)/100,target_output_jumlah:targetOut,target_output_persen:100,realisasi_output_jumlah:realOut,realisasi_output_persen:pct_(realOut,targetOut),status:'BELUM DIPERIKSA',kendala_utama:p.kendala_utama||'',tindak_lanjut:p.tindak_lanjut||'',catatan_pembaku:p.catatan_pembaku||'',keterangan:p.keterangan||'',sumber_input:'PIC'};
+  append_('PIC_INPUT',row);log_('CREATE','PIC_INPUT',row.id_input,row);return {ok:true,id:row.id_input,message:'Data PIC berhasil disimpan dan menunggu pemeriksaan Pengendali.'};
 }
 
 function saveGeneric_(key,p){
   const allowed=['MONITORING','HAMBATAN','ACTION','RISIKO','KEBUTUHAN','RENCANA','PENCAIRAN','BELANJA','DOKUMEN'];
-  if(allowed.indexOf(key)<0) return {ok:false,message:'Modul tidak tersedia.'};
-
-  const lock=LockService.getScriptLock();
-  lock.waitLock(15000);
-  try{
-    const ss=ss_();
-    const sh=ss.getSheetByName(SHEET_NAMES[key]);
-    if(!sh) throw new Error('Target sheet not found');
-
-    const ids={
-      MONITORING:'id_monitoring',
-      HAMBATAN:'id_hambatan',
-      ACTION:'id_action',
-      RISIKO:'id_risk',
-      KEBUTUHAN:'id_kebutuhan',
-      RENCANA:'id_rencana_cair',
-      PENCAIRAN:'id_transaksi',
-      BELANJA:'id_realisasi',
-      DOKUMEN:'id_dokumen'
-    };
-    const o=Object.assign({},p);
-    const idKey=ids[key];
-    o[idKey]=o[idKey]||uid_(key);
-    o.created_at=o.created_at||now_();
-    o.updated_at=now_();
-
-    sh.appendRow(SHEETS[key].map(x=>o[x]!==undefined?o[x]:''));
-    SpreadsheetApp.flush();
-    log_('CREATE',key,o[idKey],o);
-    return {ok:true,id:o[idKey],message:'Data berhasil disimpan.'};
-  }catch(err){
-    Logger.log(err);
-    return {ok:false,message:'Data belum berhasil disimpan. Silakan coba lagi.'};
-  }finally{
-    lock.releaseLock();
-  }
+  if(allowed.indexOf(key)<0) return {ok:false,message:'Modul tidak valid.'};
+  setupSheets_(); const ids={MONITORING:'id_monitoring',HAMBATAN:'id_hambatan',ACTION:'id_action',RISIKO:'id_risk',KEBUTUHAN:'id_kebutuhan',RENCANA:'id_rencana_cair',PENCAIRAN:'id_transaksi',BELANJA:'id_realisasi',DOKUMEN:'id_dokumen'}; const o=Object.assign({},p); const idKey=ids[key]; o[idKey]=o[idKey]||uid_(key); o.created_at=o.created_at||now_(); o.updated_at=now_(); append_(key,o); log_('CREATE',key,o[idKey],o); return {ok:true,id:o[idKey],message:'Data tersimpan.'};
 }
+
+function authorize_(role,code){role=String(role||'').toUpperCase();return !!CFG.ACCESS_CODES[role]&&String(code||'')===String(CFG.ACCESS_CODES[role]);}
+function getPICContext_(id,periode){
+  setupSheets_();const k=rows_('KEGIATAN').find(x=>x.id_kegiatan===id);if(!k)return {ok:false,message:'Kegiatan tidak ditemukan.'};
+  const ag=rows_('ANGGARAN').filter(x=>x.id_kegiatan===id),ku=rows_('KEBUTUHAN').filter(x=>x.id_kegiatan===id),rp=rows_('RENCANA').filter(x=>x.id_kegiatan===id),pc=rows_('PENCAIRAN').filter(x=>x.id_kegiatan===id),bl=rows_('BELANJA').filter(x=>x.id_kegiatan===id),pics=rows_('PIC_INPUT').filter(x=>x.id_kegiatan===id);
+  const pagu=ag.reduce((s,x)=>s+num_(x.jumlah_anggaran),0),kebutuhan=ku.reduce((s,x)=>s+num_(x.nilai_kebutuhan),0),rencana=rp.reduce((s,x)=>s+num_(x.nominal_rencana),0),cair=pc.reduce((s,x)=>s+num_(x.nominal_dicairkan),0),belanja=bl.reduce((s,x)=>s+num_(x.nominal_realisasi),0);
+  const same=periode?pics.filter(x=>String(x.periode)===String(periode)):pics;const latest=same.sort((a,b)=>String(b.timestamp).localeCompare(String(a.timestamp)))[0]||null;
+  return {ok:true,master:k,finance:{pagu,kebutuhan,rencana,cair,belanja,sisa:pagu-belanja},latest};
+}
+function findPIC_(id){const sh=ss_().getSheetByName(SHEET_NAMES.PIC_INPUT);if(!sh||sh.getLastRow()<2)return null;const h=SHEETS.PIC_INPUT,v=sh.getRange(2,1,sh.getLastRow()-1,h.length).getValues();for(let i=0;i<v.length;i++){const o=Object.fromEntries(h.map((x,j)=>[x,safe_(v[i][j])]));if(String(o.id_input)===String(id))return {sheet:sh,row:i+2,obj:o,headers:h};}return null;}
+function updatePICInput_(p){
+  if(!authorize_('PENGENDALI',p.code))return {ok:false,message:'Akses pengendali diperlukan.'};const f=findPIC_(p.id_input);if(!f)return {ok:false,message:'Data PIC tidak ditemukan.'};
+  const q=p.payload||{},ctx=getPICContext_(f.obj.id_kegiatan,f.obj.periode);if(!ctx.ok)return ctx;const row=Object.assign({},f.obj,q),pagu=ctx.finance.pagu;
+  row.pagu_abt=pagu;row.target_anggaran_nominal=num_(row.target_anggaran_nominal);row.realisasi_anggaran_nominal=num_(row.realisasi_anggaran_nominal);row.target_anggaran_persen=pct_(row.target_anggaran_nominal,pagu);row.realisasi_anggaran_persen=pct_(row.realisasi_anggaran_nominal,pagu);row.deviasi_persen=Math.round((row.target_anggaran_persen-row.realisasi_anggaran_persen)*100)/100;row.target_output_jumlah=num_(row.target_output_jumlah);row.realisasi_output_jumlah=num_(row.realisasi_output_jumlah);row.realisasi_output_persen=pct_(row.realisasi_output_jumlah,row.target_output_jumlah);row.status='BELUM DIPERIKSA';
+  f.sheet.getRange(f.row,1,f.headers.length).setValues([f.headers.map(h=>row[h]!==undefined?row[h]:'')]);log_('UPDATE','PIC_INPUT',p.id_input,row);return {ok:true,message:'Data PIC diperbarui dan kembali ke status BELUM DIPERIKSA.'};
+}
+function confirmPICInput_(p){if(!authorize_('PENGENDALI',p.code))return {ok:false,message:'Akses pengendali diperlukan.'};const f=findPIC_(p.id_input);if(!f)return {ok:false,message:'Data PIC tidak ditemukan.'};f.obj.status='DIKONFIRMASI';f.sheet.getRange(f.row,1,f.headers.length).setValues([f.headers.map(h=>f.obj[h]!==undefined?f.obj[h]:'')]);log_('CONFIRM','PIC_INPUT',p.id_input,f.obj);return {ok:true,message:'Data PIC telah dikonfirmasi.'};}
+function deletePICInput_(p){if(!authorize_('PENGENDALI',p.code))return {ok:false,message:'Akses pengendali diperlukan.'};const f=findPIC_(p.id_input);if(!f)return {ok:false,message:'Data PIC tidak ditemukan.'};const old=f.obj;f.sheet.deleteRow(f.row);log_('DELETE','PIC_INPUT',p.id_input,old);return {ok:true,message:'Data PIC telah dihapus dan tindakannya dicatat.'};}
+function getPICContext(id,periode){return getPICContext_(id,periode);}
+function savePICInput(payload){return savePICInput_(payload);}
+function updatePICInput(payload){return updatePICInput_(payload);}
+function confirmPICInput(payload){return confirmPICInput_(payload);}
+function deletePICInput(payload){return deletePICInput_(payload);}
