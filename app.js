@@ -1,5 +1,5 @@
 const state={
-  view:'dashboard', role:'', access:false, selectedRole:'PIC',
+  view:'pic', role:'', access:false, selectedRole:'PIC',
   data:null, picRows:[], kendaliRows:[], realisasiRows:[], monitoringRows:[],
   hambatanRows:[], actionRows:[], riskRows:[]
 };
@@ -71,7 +71,7 @@ function esc(s){return String(s??'').replace(/[&<>"']/g,m=>({'&':'&amp;','<':'&l
 async function api(action,payload={}){
   if(DEMO_MODE||!API_URL)return demoFor(action,payload);
   const cb='abt_cb_'+Date.now()+'_'+Math.floor(Math.random()*10000);
-  const q='?api='+encodeURIComponent(action)+'&callback='+cb+'&payload='+encodeURIComponent(JSON.stringify(payload||{}));
+  const extra = action==='validateAccess' ? '&code='+encodeURIComponent(payload.code||'') : ''; const q='?api='+encodeURIComponent(action)+'&callback='+cb+extra+(action==='validateAccess'?'':'&payload='+encodeURIComponent(JSON.stringify(payload||{})));
   return new Promise(resolve=>{
     let done=false;
     const finish=x=>{if(done)return;done=true;try{delete window[cb];}catch(e){};if(script)script.remove();resolve(x||{ok:false,message:'Respons kosong.'});};
@@ -125,24 +125,24 @@ function dashboard(){
 function activityTable(rows){return `<div class="table-wrap"><table class="data-table"><thead><tr><th>Kode</th><th>Nama Kegiatan</th><th>Pagu</th><th>Realisasi</th><th>Fisik</th><th>PIC</th><th>Status</th></tr></thead><tbody>${rows.length?rows.map(x=>`<tr><td>${esc(x.kode)}</td><td>${esc(x.nama)}</td><td>${rupiah(x.pagu)}</td><td>${rupiah(x.real)}</td><td>${pct(x.fisik)}</td><td>${esc(x.pic||'-')}</td><td>${status(x.status)}</td></tr>`).join(''):'<tr><td colspan="7" class="empty">Belum ada data kegiatan.</td></tr>'}</tbody></table></div>`}
 
 function picView(){
- const d=data(), acts=d.activities||[], rows=d.pic||[];
- return `<div class="page-title"><div><h2>Input Kegiatan (PIC)</h2><p>Input kondisi aktual kegiatan. Data disimpan sebagai sumber kendali dan laporan.</p></div></div>
- <section class="panel"><div class="notice">Gunakan angka aktual. Sistem menghitung persentase secara aman; nilai kosong menghasilkan <b>0%</b>, bukan NaN.</div>
+ const d=data(), acts=d.activities||[];
+ return `<div class="page-title"><div><h2>Input Data PIC</h2><p>PIC hanya mengisi data kegiatan. Dashboard dan modul pengendalian tidak ditampilkan pada akun PIC.</p></div></div>
+ <section class="panel"><div class="notice"><b>Ruang input PIC:</b> data identitas kegiatan, target anggaran, realisasi anggaran, target output, realisasi output, kendala utama dan tindak lanjut. Persentase dihitung otomatis oleh sistem.</div>
  <div class="form-grid">
   <div class="field"><label>Periode</label><input id="fPeriode" value="September 2026"></div>
-  <div class="field"><label>Direktorat</label><input id="fDir" value="Direktorat P2M"></div>
-  <div class="field"><label>Kegiatan</label><select id="fKegiatan">${acts.map(x=>`<option value="${esc(x.id||x.kode)}">${esc(x.kode)} — ${esc(x.nama)}</option>`).join('')}</select></div>
-  <div class="field"><label>PIC</label><input id="fPIC" placeholder="Nama PIC"></div>
-  <div class="field"><label>Pagu ABT</label><input id="fPagu" type="number" value="0"></div>
-  <div class="field"><label>Target Anggaran</label><input id="fTarget" type="number" value="0"></div>
-  <div class="field"><label>Realisasi Anggaran</label><input id="fReal" type="number" value="0"></div>
-  <div class="field"><label>Target Output</label><input id="fOutTarget" type="number" value="0"></div>
-  <div class="field"><label>Realisasi Output</label><input id="fOutReal" type="number" value="0"></div>
-  <div class="field"><label>Status</label><select id="fStatus"><option>TERKENDALI</option><option>PERLU PERHATIAN</option><option>RISIKO TINGGI</option><option>KRITIS</option></select></div>
-  <div class="field full"><label>Kendala Utama</label><textarea id="fKendala"></textarea></div>
-  <div class="field full"><label>Tindak Lanjut</label><textarea id="fTindak"></textarea></div>
+  <div class="field"><label>Direktorat / Unit</label><input id="fDir" placeholder="Nama direktorat/unit"></div>
+  <div class="field full"><label>Kegiatan</label><select id="fKegiatan">${acts.map(x=>`<option value="${esc(x.id||x.kode)}">${esc(x.kode)} — ${esc(x.nama)}</option>`).join('')}</select></div>
+  <div class="field"><label>Nama PIC</label><input id="fPIC" placeholder="Nama PIC"></div>
+  <div class="field"><label>Deadline</label><input id="fDeadline" type="date"></div>
+  <div class="field"><label>Pagu ABT</label><input id="fPagu" type="number" min="0" value="0"></div>
+  <div class="field"><label>Target Anggaran</label><input id="fTarget" type="number" min="0" value="0"></div>
+  <div class="field"><label>Realisasi Anggaran</label><input id="fReal" type="number" min="0" value="0"></div>
+  <div class="field"><label>Target Output (Jumlah)</label><input id="fOutTarget" type="number" min="0" value="0"></div>
+  <div class="field"><label>Realisasi Output (Jumlah)</label><input id="fOutReal" type="number" min="0" value="0"></div>
+  <div class="field full"><label>Kendala Utama</label><textarea id="fKendala" placeholder="Isi jika ada kendala"></textarea></div>
+  <div class="field full"><label>Tindak Lanjut</label><textarea id="fTindak" placeholder="Isi rencana tindak lanjut"></textarea></div>
  </div><div class="form-actions"><button class="primary" onclick="savePIC()">Simpan Data PIC</button></div></section>
- <section class="panel"><h3>Riwayat Input PIC</h3>${picTable(rows)}</section>`;
+ <section class="panel"><h3>Riwayat Input PIC</h3>${picTable(d.pic||[])}</section>`;
 }
 function picTable(rows){return `<div class="table-wrap"><table class="data-table"><thead><tr><th>Periode</th><th>Kegiatan</th><th>PIC</th><th>Pagu</th><th>Target</th><th>Realisasi</th><th>Realisasi %</th><th>Output</th><th>Status</th></tr></thead><tbody>${rows.length?rows.map(x=>`<tr><td>${esc(x.periode)}</td><td>${esc(x.id_kegiatan)}</td><td>${esc(x.pic)}</td><td>${rupiah(x.pagu)}</td><td>${rupiah(x.target)}</td><td>${rupiah(x.real)}</td><td>${pct(safePct(x.real,x.target))}</td><td>${Number(x.outputReal||0).toLocaleString('id-ID')} / ${Number(x.outputTarget||0).toLocaleString('id-ID')}</td><td>${status(x.status)}</td></tr>`).join(''):'<tr><td colspan="9" class="empty">Belum ada input PIC.</td></tr>'}</tbody></table></div>`}
 
@@ -160,21 +160,64 @@ function render(){const map={dashboard:dashboard,pic:picView,kendali:kendaliView
 function showView(v){state.view=v;render();window.scrollTo({top:0,behavior:'smooth'})}
 async function loadAll(){const r=await api('getBootstrapData');if(r.ok){state.data=r;render();}else alert(r.message||'Data belum dapat dibaca.');}
 async function savePIC(){
- const p={periode:document.getElementById('fPeriode').value,direktorat:document.getElementById('fDir').value,id_kegiatan:document.getElementById('fKegiatan').value,pic:document.getElementById('fPIC').value,pagu:Number(document.getElementById('fPagu').value)||0,target:Number(document.getElementById('fTarget').value)||0,real:Number(document.getElementById('fReal').value)||0,outputTarget:Number(document.getElementById('fOutTarget').value)||0,outputReal:Number(document.getElementById('fOutReal').value)||0,status:document.getElementById('fStatus').value,kendala:document.getElementById('fKendala').value,tindak:document.getElementById('fTindak').value};
- const r=await api('savePICInput',p);alert(r.message||'Data tersimpan.');if(r.ok)await loadAll();
+ const p={
+  periode:document.getElementById('fPeriode').value,
+  direktorat:document.getElementById('fDir').value,
+  id_kegiatan:document.getElementById('fKegiatan').value,
+  pic:document.getElementById('fPIC').value,
+  deadline:document.getElementById('fDeadline').value,
+  pagu:Number(document.getElementById('fPagu').value)||0,
+  target:Number(document.getElementById('fTarget').value)||0,
+  real:Number(document.getElementById('fReal').value)||0,
+  outputTarget:Number(document.getElementById('fOutTarget').value)||0,
+  outputReal:Number(document.getElementById('fOutReal').value)||0,
+  status:'TERKENDALI',
+  kendala:document.getElementById('fKendala').value,
+  tindak:document.getElementById('fTindak').value
+ };
+ if(!p.id_kegiatan || !p.pic){alert('Kegiatan dan Nama PIC wajib diisi.');return;}
+ const r=await api('savePICInput',p);
+ alert(r.message||'Data tersimpan.');
+ if(r.ok)await loadAll();
 }
-function openModal(){document.getElementById('modal').classList.remove('hidden')}
-function closeModal(){document.getElementById('modal').classList.add('hidden')}
+function openModal(){document.getElementById('modal').classList.remove('hidden');document.body.classList.add('locked');document.getElementById('accessCode').focus();}
+function closeModal(){if(state.access){document.getElementById('modal').classList.add('hidden');}}
+function allowedViews(role){
+ if(role==='PIC') return ['pic'];
+ if(role==='PENGENDALI') return ['dashboard','report'];
+ if(role==='PIMPINAN') return ['dashboard','report'];
+ return [];
+}
+function applyRoleUI(){
+ const allowed=allowedViews(state.role);
+ document.querySelectorAll('.nav-item').forEach(b=>{const ok=allowed.includes(b.dataset.view);b.style.display=ok?'flex':'none';b.classList.toggle('active',b.dataset.view===state.view);});
+ document.getElementById('roleLabel').textContent=state.role||'Pengguna';
+ document.getElementById('roleSub').textContent=state.access?'Akses aktif':'Belum masuk';
+}
 async function access(){
- const code=document.getElementById('accessCode').value.trim(),msg=document.getElementById('accessMsg');msg.textContent='Memeriksa akses...';
- const r=DEMO_MODE?demoFor('validateAccess',{code}):await api('validateAccess',{code});
+ const code=document.getElementById('accessCode').value.trim(),msg=document.getElementById('accessMsg');
+ if(!code){msg.textContent='Kode akses wajib diisi.';return;}
+ msg.textContent='Memeriksa akses...';
+ const r=await api('validateAccess',{code});
  if(!r.ok){msg.textContent=r.message||'Kode akses tidak sesuai.';return;}
- state.role=state.selectedRole;state.access=true;document.getElementById('roleLabel').textContent=state.role;document.getElementById('roleSub').textContent='Akses aktif';closeModal();
+ state.role=state.selectedRole;state.access=true;
+ state.view=state.role==='PIC'?'pic':(state.role==='PIMPINAN'?'report':'dashboard');
+ document.body.classList.remove('locked');
+ document.getElementById('modal').classList.add('hidden');
+ document.getElementById('accessCode').value='';
+ document.getElementById('accessMsg').textContent='';
+ applyRoleUI();
+ if(state.role!=='PIC') await loadAll(); else render();
 }
-document.querySelectorAll('.nav-item').forEach(b=>b.addEventListener('click',()=>showView(b.dataset.view)));
-document.querySelectorAll('.role-card').forEach(b=>b.addEventListener('click',()=>{document.querySelectorAll('.role-card').forEach(x=>x.classList.remove('selected'));b.classList.add('selected');state.selectedRole=b.dataset.role}));
-document.getElementById('accessBtn').onclick=openModal;document.getElementById('closeModal').onclick=closeModal;document.getElementById('doAccess').onclick=access;
-document.getElementById('logoutBtn').onclick=()=>{state.access=false;state.role='';document.getElementById('roleLabel').textContent='Pengguna';document.getElementById('roleSub').textContent='Belum masuk'};
+document.querySelectorAll('.nav-item').forEach(b=>b.addEventListener('click',()=>{if(!state.access)return; if(!allowedViews(state.role).includes(b.dataset.view))return;showView(b.dataset.view);}));
+document.querySelectorAll('.role-card').forEach(b=>b.addEventListener('click',()=>{document.querySelectorAll('.role-card').forEach(x=>x.classList.remove('selected'));b.classList.add('selected');state.selectedRole=b.dataset.role;document.getElementById('accessMsg').textContent='';}));
+document.getElementById('accessBtn').onclick=openModal;
+document.getElementById('closeModal')?.addEventListener('click',()=>{});
+document.getElementById('doAccess').onclick=access;
+document.getElementById('logoutBtn').onclick=()=>{state.access=false;state.role='';state.view='pic';document.body.classList.add('locked');document.getElementById('modal').classList.remove('hidden');document.getElementById('roleLabel').textContent='Pengguna';document.getElementById('roleSub').textContent='Belum masuk';document.getElementById('accessCode').value='';document.getElementById('accessMsg').textContent='';applyRoleUI();};
 function tick(){document.getElementById('clock').textContent=new Intl.DateTimeFormat('id-ID',{dateStyle:'full',timeStyle:'short'}).format(new Date())+' WIB'}setInterval(tick,1000);tick();
-state.data=demo;render();
-if(!DEMO_MODE&&API_URL)loadAll();
+state.data=demo;
+document.body.classList.add('locked');
+applyRoleUI();
+render();
+if(!DEMO_MODE&&API_URL){}

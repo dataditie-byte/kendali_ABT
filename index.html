@@ -6,25 +6,17 @@
 <title>Sistem Pengendalian ABT 2026 — Deputi Bidang Pencegahan BNN</title>
 <link rel="stylesheet" href="styles.css">
 </head>
-<body>
+<body class="locked">
 <div id="app">
   <aside class="sidebar">
     <div class="side-brand">
-      <div class="mini-logo"><img src="assets/logo_bnn.webp" alt="BNN"></div>
+      <div class="mini-logo"><img src="assets/logo-bnn.webp" alt="BNN"></div>
       <div><b>Sistem Pengendalian</b><strong>ABT 2026</strong><span>Deputi Bidang Pencegahan</span></div>
     </div>
     <nav id="nav">
-      <button data-view="dashboard" class="nav-item active">⌂ <span>Beranda</span></button>
-      <button data-view="pic" class="nav-item">▣ <span>Input Kegiatan (PIC)</span></button>
-      <button data-view="kendali" class="nav-item">▤ <span>Kartu Kendali</span></button>
-      <button data-view="realisasi" class="nav-item">◫ <span>Rencana &amp; Realisasi</span></button>
-      <button data-view="monitoring" class="nav-item">◴ <span>Monitoring Mingguan</span></button>
-      <button data-view="hambatan" class="nav-item">⚠ <span>Hambatan &amp; Root Cause</span></button>
-      <button data-view="action" class="nav-item">✓ <span>Corrective Action</span></button>
-      <button data-view="risk" class="nav-item">◇ <span>Risk Register</span></button>
-      <button data-view="master" class="nav-item">☷ <span>Master Data</span></button>
-      <button data-view="report" class="nav-item">▥ <span>Laporan</span></button>
-      <button data-view="docs" class="nav-item">▧ <span>Dokumentasi</span></button>
+      <button data-view="dashboard" data-roles="PENGENDALI,PIMPINAN" class="nav-item">⌂ <span>Dashboard Ringkas</span></button>
+      <button data-view="pic" data-roles="PIC" class="nav-item">▣ <span>Input Data PIC</span></button>
+      <button data-view="report" data-roles="PENGENDALI,PIMPINAN" class="nav-item">▥ <span>Laporan</span></button>
     </nav>
     <div class="side-user">
       <div class="avatar">●</div>
@@ -35,11 +27,11 @@
 
   <main class="main">
     <header class="topbar">
-      <div class="mobile-brand"><img src="assets/logo_bnn.webp" alt="BNN"><b>Pengendalian ABT 2026</b></div>
+      <div class="mobile-brand"><img src="assets/logo-bnn.webp" alt="BNN"><b>Pengendalian ABT 2026</b></div>
       <div class="top-title"><span>BADAN NARKOTIKA NASIONAL REPUBLIK INDONESIA</span><b>DEPUTI BIDANG PENCEGAHAN</b></div>
       <div class="top-actions">
         <span class="date" id="clock"></span>
-        <button class="icon-btn" id="accessBtn">Akses</button>
+        <button class="icon-btn" id="accessBtn">Akses / Ganti Peran</button>
       </div>
     </header>
 
@@ -60,17 +52,17 @@
   </main>
 </div>
 
-<div id="modal" class="modal hidden">
-  <div class="modal-card">
-    <button class="modal-x" id="closeModal">×</button>
+<div id="modal" class="modal access-gate">
+  <div class="modal-card access-card">
+    <div class="access-brand"><img src="assets/logo-bnn.webp" alt="Logo BNN"><div><b>BADAN NARKOTIKA NASIONAL</b><strong>Pengendalian ABT 2026</strong><span>Deputi Bidang Pencegahan</span></div></div>
     <h2>Akses Sistem</h2>
-    <p>Pilih peran dan masukkan kode akses.</p>
+    <p class="access-intro">Pilih peran Anda terlebih dahulu. Dashboard dan data sistem tidak ditampilkan sebelum akses berhasil.</p>
     <div class="role-grid">
-      <button class="role-card selected" data-role="PIC">PIC Kegiatan<small>Input dan pembaruan kegiatan</small></button>
-      <button class="role-card" data-role="PENGENDALI">Pengendali<small>Kontrol, monitoring dan tindak lanjut</small></button>
-      <button class="role-card" data-role="PIMPINAN">Pimpinan / Laporan<small>Dashboard dan laporan</small></button>
+      <button class="role-card selected" data-role="PIC">PIC Kegiatan<small>Hanya input dan pembaruan data PIC</small></button>
+      <button class="role-card" data-role="PENGENDALI">Pengendali<small>Dashboard ringkas dan laporan pengendalian</small></button>
+      <button class="role-card" data-role="PIMPINAN">Pimpinan / Laporan<small>Dashboard ringkas dan laporan siap cetak</small></button>
     </div>
-    <label>Kode Akses<input id="accessCode" type="password" placeholder="Masukkan kode akses"></label>
+    <label>Kode Akses<input id="accessCode" type="password" placeholder="Masukkan kode akses" autocomplete="off"></label>
     <button class="primary wide" id="doAccess">Masuk Sistem</button>
     <div id="accessMsg" class="msg"></div>
   </div>

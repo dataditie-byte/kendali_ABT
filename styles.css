@@ -23,6 +23,20 @@ button,input,select,textarea{font:inherit}button{cursor:pointer}
 .form-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:12px}.field label{display:block;font-size:11px;font-weight:700;color:#4d6681;margin-bottom:5px}.field input,.field select,.field textarea{width:100%;border:1px solid #ceddeb;border-radius:8px;padding:10px;background:#fff;color:var(--text);outline:none}.field textarea{min-height:95px;resize:vertical}.field.full{grid-column:1/-1}.form-actions{display:flex;justify-content:flex-end;gap:8px;margin-top:14px}
 .notice{padding:12px 14px;border-radius:9px;background:#eef7ff;color:#24557f;font-size:12px;margin-bottom:12px}.notice.warn{background:#fff7df;color:#805d00}
 .report-head{border-bottom:3px solid var(--navy);padding-bottom:14px;margin-bottom:16px}.report-head h1{margin:0;color:var(--navy);font-size:24px}.report-head p{margin:5px 0 0;color:var(--muted);font-size:12px}.report-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:10px}.report-box{padding:13px;border:1px solid var(--line);border-radius:9px}.report-box b{font-size:17px;color:var(--navy);display:block}.report-box span{font-size:10px;color:var(--muted)}
+
+/* Access gate: aplikasi tidak menampilkan dashboard sebelum autentikasi peran. */
+body.locked #app{visibility:hidden}
+.access-gate{z-index:9999;background:linear-gradient(135deg,rgba(4,27,54,.98),rgba(7,62,111,.97));}
+.access-card{width:min(640px,calc(100vw - 30px));padding:28px 30px;border-radius:18px;box-shadow:0 30px 90px rgba(0,0,0,.35);}
+.access-brand{display:flex;align-items:center;gap:14px;padding-bottom:18px;margin-bottom:18px;border-bottom:1px solid var(--line)}
+.access-brand img{width:64px;height:64px;object-fit:contain;border-radius:50%}
+.access-brand b{display:block;font-size:10px;letter-spacing:.7px;color:#70859b}
+.access-brand strong{display:block;color:var(--navy);font-size:21px;line-height:1.15;margin-top:3px}
+.access-brand span{display:block;color:var(--muted);font-size:11px;margin-top:4px}
+.access-card h2{font-size:24px;margin:0;color:var(--navy)}
+.access-intro{margin:6px 0 14px!important;line-height:1.6}
+.access-gate .role-grid{margin:12px 0 18px}
+.access-gate .role-card{min-height:78px}
 .modal{position:fixed;inset:0;background:rgba(5,26,51,.55);z-index:100;display:grid;place-items:center;padding:20px}.modal.hidden{display:none}.modal-card{background:#fff;border-radius:15px;width:min(560px,100%);padding:24px;box-shadow:0 25px 70px rgba(0,0,0,.25);position:relative}.modal-card h2{margin:0;color:var(--navy)}.modal-card p{color:var(--muted);font-size:12px}.modal-x{position:absolute;right:15px;top:10px;border:0;background:transparent;font-size:28px;color:#71869f}.modal-card label{font-size:11px;font-weight:700}.modal-card input{width:100%;padding:11px;border:1px solid var(--line);border-radius:8px;margin:6px 0 14px}.role-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin:15px 0}.role-card{background:#fff;border:1px solid var(--line);border-radius:9px;padding:12px;text-align:left;color:var(--navy);font-weight:800}.role-card small{display:block;color:var(--muted);font-weight:400;margin-top:5px;font-size:9px}.role-card.selected{border-color:#1b8bdd;background:#eef7ff}.msg{font-size:11px;color:#c33;margin-top:8px}
 .empty{padding:35px;text-align:center;color:#8094aa}.kpi-note{font-size:10px;color:#7890a8}.print-only{display:none}
 @media(max-width:1150px){.cards{grid-template-columns:repeat(3,1fr)}.grid2{grid-template-columns:1fr}}
