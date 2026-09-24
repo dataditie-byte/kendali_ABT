@@ -1,12 +1,12 @@
 /*******************************************************
- SISTEM PENGENDALIAN ABT 2026 — FINAL-2.2
+ SISTEM PENGENDALIAN ABT 2026 — FINAL-3.1
  Backend: Google Apps Script + Google Sheets
  Frontend: GitHub Pages
 *******************************************************/
 const CFG = {
-  SPREADSHEET_ID: '', // kosong jika script dibuat dari Spreadsheet ABT baru
+  SPREADSHEET_ID: '1kRLF6cqTeqdKHzUi7Gc4otlKRjAkzuUwSqPMK7DiEYY', // kosong jika script dibuat dari Spreadsheet ABT baru
   TZ: 'Asia/Jakarta',
-  VERSION: 'ABT-2026-FINAL-2.2',
+  VERSION: 'ABT-2026-FINAL-3.1',
   ACCESS_CODES: { PIC: 'PIC2026', PENGENDALI: 'kendali2026', PIMPINAN: 'kendali2026' }
 };
 
@@ -136,6 +136,7 @@ function doGet(e){
       const good=!!expected && code===expected;
       out={ok:good,role,message:good?'Akses diterima.':'Kode akses tidak sesuai untuk peran yang dipilih.'};
     }
+    else if(p.api==='health') out={ok:true,version:CFG.VERSION,spreadsheet:ss_().getName(),message:'ABT API aktif dan Spreadsheet terhubung.'};
     else if(p.api==='getBootstrapData') out=getBootstrapData();
     else if(p.api==='savePICInput') out=savePICInput_(JSON.parse(p.payload||'{}'));
     else if(p.api==='saveGeneric') out=saveGeneric_(p.key,JSON.parse(p.payload||'{}'));
