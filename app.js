@@ -12,7 +12,7 @@ function esc(s){return String(s??'').replace(/[&<>"']/g,m=>({'&':'&amp;','<':'&l
 
 async function api(action,payload={}){
   if(!API_URL){
-    return {ok:false,message:'API_URL Apps Script belum dikonfigurasi pada config.js.'};
+    return {ok:false,message:'Layanan data belum tersedia. Silakan coba lagi.'};
   }
   const cb='abt_cb_'+Date.now()+'_'+Math.floor(Math.random()*10000);
   const extra=action==='validateAccess'
@@ -32,15 +32,15 @@ async function api(action,payload={}){
     window[cb]=finish;
     script=document.createElement('script');
     script.src=API_URL.replace(/\/$/,'')+q;
-    script.onerror=()=>finish({ok:false,message:'Gagal menghubungi server Apps Script. Periksa deployment Web App dan URL /exec.'});
+    script.onerror=()=>finish({ok:false,message:'Layanan data tidak dapat dihubungi. Silakan coba lagi.'});
     document.body.appendChild(script);
-    setTimeout(()=>finish({ok:false,message:'API timeout. Periksa deployment Web App Apps Script.'}),45000);
+    setTimeout(()=>finish({ok:false,message:'Layanan data belum merespons. Silakan coba lagi.'}),45000);
   });
 }
 function data(){return state.data||{}}
 
 function dashboard(){
- if(state.loading) return `<section class="panel loading-panel"><div class="loading">Memuat data ABT 2026 dari Google Spreadsheet…</div></section>`;
+ if(state.loading) return `<section class="panel loading-panel"><div class="loading">Memuat data ABT 2026…</div></section>`;
  if(state.error) return `<section class="panel error-panel"><h3>Data belum tersedia</h3><p>${esc(state.error)}</p><button class="secondary" onclick="loadAll()">↻ Coba Lagi</button></section>`;
  const d=data(),s=d.summary||{},m=d.monthly||[],a=d.activities||[],att=d.attention||[];
  const max=Math.max(...m.map(x=>Number(x.p)||0),...m.map(x=>Number(x.c)||0),...m.map(x=>Number(x.r)||0),1);
@@ -50,7 +50,7 @@ function dashboard(){
  const critical=a.filter(x=>String(x.status).toUpperCase().includes('KRITIS')).length;
  return `<div class="page-title"><div><h2>Dashboard Pengendalian ABT 2026</h2><p>Ringkasan kendali anggaran, pencairan, belanja, fisik, output dan perhatian pimpinan.</p></div><div class="toolbar"><button class="secondary" onclick="loadAll()">↻ Perbarui</button><button class="primary" onclick="window.print()">Cetak</button></div></div>
  <div class="cards">
-  <div class="metric blue"><div class="label">Total Pagu</div><div class="value">${rupiah(s.pagu)}</div><div class="sub">100% baseline ABT</div></div>
+  <div class="metric blue"><div class="label">Total Pagu</div><div class="value">${rupiah(s.pagu)}</div><div class="sub">Proporsi terhadap pagu</div></div>
   <div class="metric green"><div class="label">Kebutuhan Dana</div><div class="value">${rupiah(s.kebutuhan)}</div><div class="sub">${pct(safePct(s.kebutuhan,s.pagu))} dari pagu</div></div>
   <div class="metric amber"><div class="label">Rencana Pencairan</div><div class="value">${rupiah(s.rencana)}</div><div class="sub">${pct(safePct(s.rencana,s.pagu))} dari pagu</div></div>
   <div class="metric blue"><div class="label">Pencairan Aktual</div><div class="value">${rupiah(s.cair)}</div><div class="sub">${pct(safePct(s.cair,s.pagu))} dari pagu</div></div>
@@ -77,7 +77,7 @@ function dashboard(){
 function activityTable(rows){return `<div class="table-wrap"><table class="data-table"><thead><tr><th>Kode</th><th>Nama Kegiatan</th><th>Pagu</th><th>Realisasi</th><th>Fisik</th><th>PIC</th><th>Status</th></tr></thead><tbody>${rows.length?rows.map(x=>`<tr><td>${esc(x.kode)}</td><td>${esc(x.nama)}</td><td>${rupiah(x.pagu)}</td><td>${rupiah(x.real)}</td><td>${pct(x.fisik)}</td><td>${esc(x.pic||'-')}</td><td>${status(x.status)}</td></tr>`).join(''):'<tr><td colspan="7" class="empty">Belum ada data kegiatan.</td></tr>'}</tbody></table></div>`}
 
 function picView(){
- if(state.loading) return `<section class="panel loading-panel"><div class="loading">Memuat data kegiatan dari Google Spreadsheet…</div></section>`;
+ if(state.loading) return `<section class="panel loading-panel"><div class="loading">Memuat data kegiatan…</div></section>`;
  if(state.error) return `<section class="panel error-panel"><h3>Data belum tersedia</h3><p>${esc(state.error)}</p><button class="secondary" onclick="loadAll()">↻ Coba Lagi</button></section>`;
  const d=data(), acts=d.activities||[];
  return `<div class="page-title"><div><h2>Input Data PIC</h2><p>PIC hanya mengisi data kegiatan. Dashboard lengkap dan modul pengendalian tidak ditampilkan pada akun PIC.</p></div></div>
@@ -105,9 +105,9 @@ function monitoringView(){const rows=data().monitoring||[];return `<div class="p
 function hambatanView(){const rows=data().hambatan||[];return `<div class="page-title"><div><h2>Hambatan &amp; Root Cause</h2><p>Masalah, akar penyebab, dampak dan status pengendalian.</p></div></div><section class="panel"><div class="table-wrap"><table class="data-table"><thead><tr><th>Kode</th><th>Masalah</th><th>Root Cause</th><th>Dampak</th><th>Level</th><th>Status</th></tr></thead><tbody>${rows.length?rows.map(x=>`<tr><td>${esc(x.kode)}</td><td>${esc(x.masalah)}</td><td>${esc(x.root)}</td><td>${esc(x.dampak)}</td><td>${esc(x.level)}</td><td>${status(x.status)}</td></tr>`).join(''):'<tr><td colspan="6" class="empty">Belum ada hambatan yang dicatat.</td></tr>'}</tbody></table></div></section>`}
 function actionView(){const rows=data().action||[];return `<div class="page-title"><div><h2>Corrective Action</h2><p>Tindakan korektif, PIC, deadline dan status penyelesaian.</p></div></div><section class="panel"><div class="table-wrap"><table class="data-table"><thead><tr><th>Kode</th><th>Temuan</th><th>Tindakan</th><th>PIC</th><th>Deadline</th><th>Status</th></tr></thead><tbody>${rows.length?rows.map(x=>`<tr><td>${esc(x.kode)}</td><td>${esc(x.temuan)}</td><td>${esc(x.tindakan)}</td><td>${esc(x.pic)}</td><td>${esc(x.deadline)}</td><td>${status(x.status)}</td></tr>`).join(''):'<tr><td colspan="6" class="empty">Belum ada corrective action.</td></tr>'}</tbody></table></div></section>`}
 function riskView(){const rows=data().risk||[];return `<div class="page-title"><div><h2>Risk Register</h2><p>Risiko, penyebab, dampak, mitigasi, PIC dan status.</p></div></div><section class="panel"><div class="table-wrap"><table class="data-table"><thead><tr><th>Kode</th><th>Risiko</th><th>Penyebab</th><th>Prob.</th><th>Dampak</th><th>Level</th><th>Mitigasi</th><th>Status</th></tr></thead><tbody>${rows.length?rows.map(x=>`<tr><td>${esc(x.kode)}</td><td>${esc(x.risiko)}</td><td>${esc(x.penyebab)}</td><td>${esc(x.prob)}</td><td>${esc(x.dampak)}</td><td>${status(x.level)}</td><td>${esc(x.mitigasi)}</td><td>${status(x.status)}</td></tr>`).join(''):'<tr><td colspan="8" class="empty">Belum ada risk register.</td></tr>'}</tbody></table></div></section>`}
-function masterView(){const d=data();return `<div class="page-title"><div><h2>Master Data</h2><p>Baseline kegiatan dan anggaran yang menjadi sumber perhitungan sistem.</p></div></div><section class="panel"><div class="notice">Total pagu yang terbaca dari master anggaran: <b>${rupiah(d.summary?.pagu)}</b>. Data aktual berikutnya dibaca langsung dari Spreadsheet.</div>${activityTable(d.activities||[])}</section>`}
-function reportView(){if(state.loading)return `<section class="panel loading-panel"><div class="loading">Memuat laporan dari Google Spreadsheet…</div></section>`;if(state.error)return `<section class="panel error-panel"><h3>Laporan belum tersedia</h3><p>${esc(state.error)}</p><button class="secondary" onclick="loadAll()">↻ Coba Lagi</button></section>`;const d=data(),s=d.summary||{},att=d.attention||[];return `<div class="page-title"><div><h2>Laporan Pengendalian</h2><p>Laporan ringkas siap cetak untuk pimpinan.</p></div><button class="primary" onclick="window.print()">Cetak / PDF</button></div><section class="panel"><div class="report-head"><h1>LAPORAN PENGENDALIAN ANGGARAN BELANJA TAMBAHAN (ABT) 2026</h1><p>Deputi Bidang Pencegahan · Badan Narkotika Nasional Republik Indonesia</p></div><div class="report-grid"><div class="report-box"><span>Total Pagu</span><b>${rupiah(s.pagu)}</b></div><div class="report-box"><span>Pencairan Aktual</span><b>${rupiah(s.cair)}</b></div><div class="report-box"><span>Realisasi Belanja</span><b>${rupiah(s.belanja)}</b></div><div class="report-box"><span>Capaian Fisik</span><b>${pct(s.fisik)}</b></div></div><h3 style="margin-top:22px">1. Ringkasan Kondisi</h3><p style="font-size:12px;line-height:1.7">Pagu ABT sebesar <b>${rupiah(s.pagu)}</b>. Pencairan aktual sebesar <b>${rupiah(s.cair)}</b> dan realisasi belanja sebesar <b>${rupiah(s.belanja)}</b>. Capaian fisik tercatat <b>${pct(s.fisik)}</b> dan capaian output <b>${pct(s.outputPct)}</b>. Angka pada laporan dibaca dari data yang telah terisi pada database ABT.</p><h3>2. Kegiatan yang Memerlukan Perhatian</h3>${att.length?att.map(x=>`<div style="padding:10px;border-left:3px solid #efb33b;background:#fffaf0;margin:7px 0;font-size:11px"><b>${esc(x.kode)}</b> — ${esc(x.problem)}. ${esc(x.impact)}. ${status(x.status)}</div>`).join(''):'<p class="empty">Belum ada kegiatan yang memerlukan perhatian berdasarkan data terisi.</p>'}<h3>3. Analisis Pengendalian</h3><p style="font-size:12px;line-height:1.7">Analisis membaca kesesuaian antara pagu, kebutuhan dana, rencana pencairan, pencairan aktual dan realisasi belanja. Progres fisik dan output dibaca dari monitoring terbaru per kegiatan. Hambatan, root cause dan corrective action digunakan sebagai dasar tindak lanjut.</p><h3>4. Tindak Lanjut</h3><p style="font-size:12px;line-height:1.7">Kegiatan yang menunjukkan deviasi perlu ditindaklanjuti melalui pembaruan monitoring, penetapan PIC, batas waktu, dokumentasi dan verifikasi penyelesaian. Sistem tidak mengubah data sumber; laporan mengikuti data terakhir yang tersimpan.</p><h3>5. Lampiran Kegiatan</h3>${activityTable(d.activities||[])}</section>`}
-function docsView(){return `<div class="page-title"><div><h2>Dokumentasi</h2><p>Dokumen pendukung, bukti verifikasi dan arsip pengendalian.</p></div></div><section class="panel"><div class="empty">Dokumen pendukung dikelola pada sheet 11_DOKUMEN_PENDUKUNG. Tautan Drive dapat disimpan melalui backend.</div></section>`}
+function masterView(){const d=data();return `<div class="page-title"><div><h2>Master Data</h2><p>Baseline kegiatan dan anggaran yang menjadi sumber perhitungan sistem.</p></div></div><section class="panel"><div class="notice">Total pagu: <b>${rupiah(d.summary?.pagu)}</b>.</div>${activityTable(d.activities||[])}</section>`}
+function reportView(){if(state.loading)return `<section class="panel loading-panel"><div class="loading">Memuat laporan…</div></section>`;if(state.error)return `<section class="panel error-panel"><h3>Laporan belum tersedia</h3><p>${esc(state.error)}</p><button class="secondary" onclick="loadAll()">↻ Coba Lagi</button></section>`;const d=data(),s=d.summary||{},att=d.attention||[];return `<div class="page-title"><div><h2>Laporan Pengendalian</h2><p>Laporan ringkas siap cetak untuk pimpinan.</p></div><button class="primary" onclick="window.print()">Cetak / PDF</button></div><section class="panel"><div class="report-head"><h1>LAPORAN PENGENDALIAN ANGGARAN BELANJA TAMBAHAN (ABT) 2026</h1><p>Deputi Bidang Pencegahan · Badan Narkotika Nasional Republik Indonesia</p></div><div class="report-grid"><div class="report-box"><span>Total Pagu</span><b>${rupiah(s.pagu)}</b></div><div class="report-box"><span>Pencairan Aktual</span><b>${rupiah(s.cair)}</b></div><div class="report-box"><span>Realisasi Belanja</span><b>${rupiah(s.belanja)}</b></div><div class="report-box"><span>Capaian Fisik</span><b>${pct(s.fisik)}</b></div></div><h3 style="margin-top:22px">1. Ringkasan Kondisi</h3><p style="font-size:12px;line-height:1.7">Pagu ABT sebesar <b>${rupiah(s.pagu)}</b>. Pencairan aktual sebesar <b>${rupiah(s.cair)}</b> dan realisasi belanja sebesar <b>${rupiah(s.belanja)}</b>. Capaian fisik tercatat <b>${pct(s.fisik)}</b> dan capaian output <b>${pct(s.outputPct)}</b>. Angka pada laporan mengikuti data yang telah tercatat pada sistem.</p><h3>2. Kegiatan yang Memerlukan Perhatian</h3>${att.length?att.map(x=>`<div style="padding:10px;border-left:3px solid #efb33b;background:#fffaf0;margin:7px 0;font-size:11px"><b>${esc(x.kode)}</b> — ${esc(x.problem)}. ${esc(x.impact)}. ${status(x.status)}</div>`).join(''):'<p class="empty">Belum ada kegiatan yang memerlukan perhatian berdasarkan data terisi.</p>'}<h3>3. Analisis Pengendalian</h3><p style="font-size:12px;line-height:1.7">Analisis membaca kesesuaian antara pagu, kebutuhan dana, rencana pencairan, pencairan aktual dan realisasi belanja. Progres fisik dan output dibaca dari monitoring terbaru per kegiatan. Hambatan, root cause dan corrective action digunakan sebagai dasar tindak lanjut.</p><h3>4. Tindak Lanjut</h3><p style="font-size:12px;line-height:1.7">Kegiatan yang menunjukkan deviasi perlu ditindaklanjuti melalui pembaruan monitoring, penetapan PIC, batas waktu, dokumentasi dan verifikasi penyelesaian. Sistem tidak mengubah data sumber; laporan mengikuti data terakhir yang tersimpan.</p><h3>5. Lampiran Kegiatan</h3>${activityTable(d.activities||[])}</section>`}
+function docsView(){return `<div class="page-title"><div><h2>Dokumentasi</h2><p>Dokumen pendukung, bukti verifikasi dan arsip pengendalian.</p></div></div><section class="panel"><div class="empty">Dokumen pendukung dan bukti verifikasi dapat dicatat melalui modul Dokumentasi.</div></section>`}
 
 function render(){const map={dashboard:dashboard,pic:picView,kendali:kendaliView,realisasi:realisasiView,monitoring:monitoringView,hambatan:hambatanView,action:actionView,risk:riskView,master:masterView,report:reportView,docs:docsView};document.getElementById('content').innerHTML=map[state.view]();document.querySelectorAll('.nav-item').forEach(x=>x.classList.toggle('active',x.dataset.view===state.view));}
 function showView(v){state.view=v;render();window.scrollTo({top:0,behavior:'smooth'})}
@@ -130,11 +130,12 @@ async function loadAll(){
 }
 
 async function savePIC(){
+ const btn=document.querySelector('.form-actions .primary');
  const p={
   periode:document.getElementById('fPeriode').value,
   direktorat:document.getElementById('fDir').value,
   id_kegiatan:document.getElementById('fKegiatan').value,
-  pic:document.getElementById('fPIC').value,
+  pic:document.getElementById('fPIC').value.trim(),
   deadline:document.getElementById('fDeadline').value,
   pagu:Number(document.getElementById('fPagu').value)||0,
   target:Number(document.getElementById('fTarget').value)||0,
@@ -142,13 +143,34 @@ async function savePIC(){
   outputTarget:Number(document.getElementById('fOutTarget').value)||0,
   outputReal:Number(document.getElementById('fOutReal').value)||0,
   status:'TERKENDALI',
-  kendala:document.getElementById('fKendala').value,
-  tindak:document.getElementById('fTindak').value
+  kendala:document.getElementById('fKendala').value.trim(),
+  tindak:document.getElementById('fTindak').value.trim()
  };
- if(!p.id_kegiatan || !p.pic){alert('Kegiatan dan Nama PIC wajib diisi.');return;}
- const r=await api('savePICInput',p);
- alert(r.message||'Data tersimpan.');
- if(r.ok)await loadAll();
+ if(!p.id_kegiatan || !p.pic){
+   alert('Kegiatan dan Nama PIC wajib diisi.');
+   return;
+ }
+ if(btn){
+   btn.disabled=true;
+   btn.dataset.oldText=btn.textContent;
+   btn.textContent='Menyimpan…';
+ }
+ try{
+   const r=await api('savePICInput',p);
+   if(r && r.ok){
+     alert('Data PIC berhasil disimpan.');
+     await loadAll();
+   }else{
+     alert((r&&r.message)||'Data belum berhasil disimpan. Silakan coba lagi.');
+   }
+ }catch(e){
+   alert('Data belum berhasil disimpan. Silakan coba lagi.');
+ }finally{
+   if(btn){
+     btn.disabled=false;
+     btn.textContent=btn.dataset.oldText||'Simpan Data PIC';
+   }
+ }
 }
 function openModal(){document.getElementById('modal').classList.remove('hidden');document.body.classList.add('locked');document.getElementById('accessCode').focus();}
 function closeModal(){if(state.access){document.getElementById('modal').classList.add('hidden');}}

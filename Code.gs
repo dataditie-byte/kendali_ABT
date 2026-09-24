@@ -1,12 +1,12 @@
 /*******************************************************
- SISTEM PENGENDALIAN ABT 2026 — FINAL-3.2
+ SISTEM PENGENDALIAN ABT 2026 — FINAL-3.3
  Backend: Google Apps Script + Google Sheets
  Frontend: GitHub Pages
 *******************************************************/
 const CFG = {
   SPREADSHEET_ID: '1kRLF6cqTeqdKHzUi7Gc4otlKRjAkzuUwSqPMK7DiEYY', // kosong jika script dibuat dari Spreadsheet ABT baru
   TZ: 'Asia/Jakarta',
-  VERSION: 'ABT-2026-FINAL-3.2',
+  VERSION: 'ABT-2026-FINAL-3.3',
   ACCESS_CODES: { PIC: 'PIC2026', PENGENDALI: 'kendali2026', PIMPINAN: 'kendali2026' }
 };
 
@@ -143,7 +143,7 @@ function doGet(e){
     else if(p.api==='saveGeneric') out=saveGeneric_(p.key,JSON.parse(p.payload||'{}'));
     else if(p.api==='getReport') out=getBootstrapData();
     else out={ok:false,message:'API tidak dikenal.'};
-  }catch(err){out={ok:false,message:String(err&&err.message||err)};}
+  }catch(err){Logger.log(err); out={ok:false,message:'Permintaan belum dapat diproses. Silakan coba lagi.'};}
   const cb=String(p.callback||'').replace(/[^\w.$]/g,'');
   if(cb) return ContentService.createTextOutput(cb+'('+JSON.stringify(out)+')').setMimeType(ContentService.MimeType.JAVASCRIPT);
   return ContentService.createTextOutput(JSON.stringify(out)).setMimeType(ContentService.MimeType.JSON);
@@ -226,12 +226,89 @@ function buildMonthly_(rencana,pencairan,belanja){
 }
 
 function savePICInput_(p){
-  setupSheets_(); const id=uid_('PIC');
-  const row={id_input:id,timestamp:now_(),periode:p.periode||'',direktorat:p.direktorat||'',id_kegiatan:p.id_kegiatan||'',tujuan:p.tujuan||'',sasaran:p.sasaran||'',deadline:p.deadline||'',pic:p.pic||'',pagu_abt:num_(p.pagu),target_anggaran_nominal:num_(p.target),target_anggaran_persen:pct_(p.target,p.pagu),realisasi_anggaran_nominal:num_(p.real),realisasi_anggaran_persen:pct_(p.real,p.target),deviasi_persen:pct_(Math.max(num_(p.target)-num_(p.real),0),p.target),target_output_jumlah:num_(p.outputTarget),target_output_persen:100,realisasi_output_jumlah:num_(p.outputReal),realisasi_output_persen:pct_(p.outputReal,p.outputTarget),status:p.status||'TERKENDALI',kendala_utama:p.kendala||'',tindak_lanjut:p.tindak||'',catatan_pembaku:'',keterangan:'',sumber_input:'PIC'};
-  append_('PIC_INPUT',row); log_('CREATE','PIC_INPUT',id,row); return {ok:true,id,message:'Data PIC berhasil disimpan.'};
+  const lock=LockService.getScriptLock();
+  lock.waitLock(15000);
+  try{
+    const ss=ss_();
+    const sh=ss.getSheetByName(SHEET_NAMES.PIC_INPUT);
+    if(!sh) throw new Error('PIC_INPUT sheet not found');
+
+    const id=uid_('PIC');
+    const row={
+      id_input:id,
+      timestamp:now_(),
+      periode:p.periode||'',
+      direktorat:p.direktorat||'',
+      id_kegiatan:p.id_kegiatan||'',
+      tujuan:p.tujuan||'',
+      sasaran:p.sasaran||'',
+      deadline:p.deadline||'',
+      pic:p.pic||'',
+      pagu_abt:num_(p.pagu),
+      target_anggaran_nominal:num_(p.target),
+      target_anggaran_persen:pct_(p.target,p.pagu),
+      realisasi_anggaran_nominal:num_(p.real),
+      realisasi_anggaran_persen:pct_(p.real,p.target),
+      deviasi_persen:pct_(Math.max(num_(p.target)-num_(p.real),0),p.target),
+      target_output_jumlah:num_(p.outputTarget),
+      target_output_persen:100,
+      realisasi_output_jumlah:num_(p.outputReal),
+      realisasi_output_persen:pct_(p.outputReal,p.outputTarget),
+      status:p.status||'TERKENDALI',
+      kendala_utama:p.kendala||'',
+      tindak_lanjut:p.tindak||'',
+      catatan_pembaku:'',
+      keterangan:'',
+      sumber_input:'PIC'
+    };
+
+    sh.appendRow(SHEETS.PIC_INPUT.map(x=>row[x]!==undefined?row[x]:''));
+    SpreadsheetApp.flush();
+    log_('CREATE','PIC_INPUT',id,row);
+    return {ok:true,id:id,message:'Data PIC berhasil disimpan.'};
+  }catch(err){
+    Logger.log(err);
+    return {ok:false,message:'Data PIC belum berhasil disimpan. Silakan coba lagi.'};
+  }finally{
+    lock.releaseLock();
+  }
 }
 function saveGeneric_(key,p){
   const allowed=['MONITORING','HAMBATAN','ACTION','RISIKO','KEBUTUHAN','RENCANA','PENCAIRAN','BELANJA','DOKUMEN'];
-  if(allowed.indexOf(key)<0) return {ok:false,message:'Modul tidak valid.'};
-  setupSheets_(); const ids={MONITORING:'id_monitoring',HAMBATAN:'id_hambatan',ACTION:'id_action',RISIKO:'id_risk',KEBUTUHAN:'id_kebutuhan',RENCANA:'id_rencana_cair',PENCAIRAN:'id_transaksi',BELANJA:'id_realisasi',DOKUMEN:'id_dokumen'}; const o=Object.assign({},p); const idKey=ids[key]; o[idKey]=o[idKey]||uid_(key); o.created_at=o.created_at||now_(); o.updated_at=now_(); append_(key,o); log_('CREATE',key,o[idKey],o); return {ok:true,id:o[idKey],message:'Data tersimpan.'};
+  if(allowed.indexOf(key)<0) return {ok:false,message:'Modul tidak tersedia.'};
+
+  const lock=LockService.getScriptLock();
+  lock.waitLock(15000);
+  try{
+    const ss=ss_();
+    const sh=ss.getSheetByName(SHEET_NAMES[key]);
+    if(!sh) throw new Error('Target sheet not found');
+
+    const ids={
+      MONITORING:'id_monitoring',
+      HAMBATAN:'id_hambatan',
+      ACTION:'id_action',
+      RISIKO:'id_risk',
+      KEBUTUHAN:'id_kebutuhan',
+      RENCANA:'id_rencana_cair',
+      PENCAIRAN:'id_transaksi',
+      BELANJA:'id_realisasi',
+      DOKUMEN:'id_dokumen'
+    };
+    const o=Object.assign({},p);
+    const idKey=ids[key];
+    o[idKey]=o[idKey]||uid_(key);
+    o.created_at=o.created_at||now_();
+    o.updated_at=now_();
+
+    sh.appendRow(SHEETS[key].map(x=>o[x]!==undefined?o[x]:''));
+    SpreadsheetApp.flush();
+    log_('CREATE',key,o[idKey],o);
+    return {ok:true,id:o[idKey],message:'Data berhasil disimpan.'};
+  }catch(err){
+    Logger.log(err);
+    return {ok:false,message:'Data belum berhasil disimpan. Silakan coba lagi.'};
+  }finally{
+    lock.releaseLock();
+  }
 }
