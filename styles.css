@@ -48,3 +48,5 @@ body.locked #app{visibility:hidden}
 .loading{font-weight:700;color:#17416f;padding:30px}
 .error-panel{border-left:4px solid #c65a35}
 .error-panel p{font-size:12px;line-height:1.6;color:#6b7280;white-space:pre-wrap}
+
+.table-actions{display:flex;gap:5px;flex-wrap:wrap}.small-btn{padding:6px 8px;font-size:10px}.badge-count{display:inline-flex;align-items:center;padding:5px 9px;border-radius:999px;background:#eef5fb;color:#1b5d96;font-size:10px;font-weight:800}.pic-table{min-width:1180px}.pic-edit-card{width:min(920px,94vw);max-height:90vh;overflow:auto}.modal-overlay{position:fixed;inset:0;background:rgba(4,25,49,.55);display:flex;align-items:center;justify-content:center;z-index:1000;padding:20px}.modal-card{background:#fff;border-radius:14px;box-shadow:0 20px 60px rgba(0,0,0,.25);padding:20px}.modal-head{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:14px}.modal-head h3{margin:0}.modal-head p{margin:4px 0 0;color:#71869f;font-size:11px}.modal-card textarea{min-height:90px}.muted{color:#71869f;font-size:10px}

@@ -1,5 +1,5 @@
 const state={
-  view:'pic', role:'', access:false, selectedRole:'PIC',
+  view:'pic', role:'', access:false, selectedRole:'PIC', accessCode:'',
   data:null, loading:false, error:'', picRows:[], kendaliRows:[], realisasiRows:[], monitoringRows:[],
   hambatanRows:[], actionRows:[], riskRows:[]
 };
@@ -72,8 +72,17 @@ function dashboard(){
   </section>
   <section class="panel"><h3>Perhatian Pimpinan</h3>${att.length?att.map(x=>`<div style="padding:10px 0;border-bottom:1px solid #edf2f6"><b style="font-size:11px">${esc(x.kode)}</b><div style="font-size:11px;margin-top:3px">${esc(x.problem)}</div><div style="font-size:10px;color:#7b91a8">${esc(x.impact)} · ${status(x.status)}</div></div>`).join(''):'<div class="empty">Belum ada kegiatan yang memerlukan perhatian berdasarkan data terisi.</div>'}</section>
  </div>
- <section class="panel"><div class="panel-head"><h3>Daftar Kegiatan Strategis</h3><button class="secondary" onclick="showView('kendali')">Lihat Semua</button></div>${activityTable(a)}</section>`;
+ <section class="panel"><div class="panel-head"><h3>Daftar Kegiatan Strategis</h3><button class="secondary" onclick="showView('kendali')">Lihat Semua</button></div>${activityTable(a)}</section>
+ ${state.role==='PENGENDALI'?picInbox(d.pic||[]):''}`;
 }
+function picInbox(rows){
+ const r=rows||[];
+ return `<section class="panel pic-inbox"><div class="panel-head"><div><h3>Data Masuk PIC</h3><div class="muted">Data yang telah diisi PIC dan menunggu pemeriksaan Pengendali.</div></div><span class="badge-count">${r.length} data</span></div>
+ <div class="table-wrap"><table class="data-table pic-table"><thead><tr><th>Periode</th><th>Direktorat</th><th>Kegiatan</th><th>PIC</th><th>Pagu</th><th>Target</th><th>Realisasi</th><th>Output</th><th>Status</th><th>Konfirmasi</th><th>Aksi</th></tr></thead><tbody>
+ ${r.length?r.map(x=>`<tr><td>${esc(x.periode)}</td><td>${esc(x.direktorat)}</td><td><b>${esc(x.kode||x.id_kegiatan)}</b><br><span class="muted">${esc(x.nama||'')}</span></td><td>${esc(x.pic||'-')}</td><td>${rupiah(x.pagu)}</td><td>${rupiah(x.target)}</td><td>${rupiah(x.real)}</td><td>${Number(x.outputReal||0).toLocaleString('id-ID')} / ${Number(x.outputTarget||0).toLocaleString('id-ID')}</td><td>${status(x.status)}</td><td>${x.confirmed?'<span class="status ok">DIKONFIRMASI</span>':'<span class="status warn">BELUM</span>'}</td><td><div class="table-actions">${x.confirmed?'':'<button class="secondary small-btn" onclick="confirmPIC(\''+esc(x.id_input)+'\')">Konfirmasi</button>'}<button class="secondary small-btn" onclick="editPIC(\''+esc(x.id_input)+'\')">Edit</button><button class="danger small-btn" onclick="deletePIC(\''+esc(x.id_input)+'\')">Hapus</button></div></td></tr>`).join(''):'<tr><td colspan="11" class="empty">Belum ada data yang masuk dari PIC.</td></tr>'}
+ </tbody></table></div></section>`;
+}
+
 function activityTable(rows){return `<div class="table-wrap"><table class="data-table"><thead><tr><th>Kode</th><th>Nama Kegiatan</th><th>Pagu</th><th>Realisasi</th><th>Fisik</th><th>PIC</th><th>Status</th></tr></thead><tbody>${rows.length?rows.map(x=>`<tr><td>${esc(x.kode)}</td><td>${esc(x.nama)}</td><td>${rupiah(x.pagu)}</td><td>${rupiah(x.real)}</td><td>${pct(x.fisik)}</td><td>${esc(x.pic||'-')}</td><td>${status(x.status)}</td></tr>`).join(''):'<tr><td colspan="7" class="empty">Belum ada data kegiatan.</td></tr>'}</tbody></table></div>`}
 
 function picView(){
@@ -172,6 +181,45 @@ async function savePIC(){
    }
  }
 }
+function picEditModal(row){
+ const acts=data().activities||[];
+ return `<div id="picEditOverlay" class="modal-overlay" onclick="if(event.target===this)closePICEdit()"><div class="modal-card pic-edit-card"><div class="modal-head"><div><h3>Edit Data PIC</h3><p>Perubahan akan menandai data kembali sebagai belum dikonfirmasi.</p></div><button class="icon-btn" onclick="closePICEdit()">×</button></div><div class="form-grid">
+ <div class="field"><label>Periode</label><select id="ePeriode"><option>September 2026</option><option>Oktober 2026</option><option>Nopember 2026</option><option>Desember 2026</option></select></div>
+ <div class="field"><label>Direktorat</label><select id="eDir"><option>Direktorat Informasi & Edukasi</option><option>Direktorat Advokasi</option></select></div>
+ <div class="field full"><label>Kegiatan</label><select id="eKegiatan">${acts.map(x=>`<option value="${esc(x.id)}">${esc(x.kode)} — ${esc(x.nama)}</option>`).join('')}</select></div>
+ <div class="field"><label>Nama PIC</label><input id="ePIC"></div><div class="field"><label>Deadline</label><input id="eDeadline" type="date"></div>
+ <div class="field"><label>Pagu ABT</label><input id="ePagu" type="number" min="0" readonly></div><div class="field"><label>Target Anggaran</label><input id="eTarget" type="number" min="0"></div>
+ <div class="field"><label>Realisasi Anggaran</label><input id="eReal" type="number" min="0"></div><div class="field"><label>Target Output</label><input id="eOutTarget" type="number" min="0"></div>
+ <div class="field"><label>Realisasi Output</label><input id="eOutReal" type="number" min="0"></div>
+ <div class="field full"><label>Kendala Utama</label><textarea id="eKendala"></textarea></div><div class="field full"><label>Tindak Lanjut</label><textarea id="eTindak"></textarea></div>
+ </div><div class="form-actions"><button class="secondary" onclick="closePICEdit()">Batal</button><button class="primary" id="savePICEditBtn" onclick="submitPICEdit()">Simpan Perubahan</button></div></div></div>`;
+}
+function openPICEdit(id){
+ const row=(data().pic||[]).find(x=>String(x.id_input)===String(id)); if(!row)return;
+ document.body.insertAdjacentHTML('beforeend',picEditModal(row));
+ document.getElementById('picEditOverlay').dataset.id=row.id_input;
+ const acts=data().activities||[]; const act=acts.find(x=>String(x.id)===String(row.id_kegiatan));
+ document.getElementById('ePeriode').value=row.periode||'September 2026';document.getElementById('eDir').value=row.direktorat||'Direktorat Informasi & Edukasi';
+ document.getElementById('eKegiatan').value=row.id_kegiatan||'';document.getElementById('ePIC').value=row.pic||'';document.getElementById('eDeadline').value=row.deadline||'';
+ document.getElementById('ePagu').value=act?.pagu||row.pagu||0;document.getElementById('eTarget').value=row.target||0;document.getElementById('eReal').value=row.real||0;
+ document.getElementById('eOutTarget').value=row.outputTarget||0;document.getElementById('eOutReal').value=row.outputReal||0;document.getElementById('eKendala').value=row.kendala||'';document.getElementById('eTindak').value=row.tindak||'';
+}
+function editPIC(id){openPICEdit(id)}
+function closePICEdit(){document.getElementById('picEditOverlay')?.remove()}
+async function submitPICEdit(){
+ const id=document.querySelector('#picEditOverlay')?.dataset?.id || '';
+ const overlay=document.getElementById('picEditOverlay');
+ const targetId=overlay?.querySelector('#eKegiatan')?.value;
+ const original=(data().pic||[]).find(x=>String(x.id_input)===String(id));
+ if(!original){alert('Data PIC tidak ditemukan.');return;}
+ const btn=document.getElementById('savePICEditBtn'); if(btn){btn.disabled=true;btn.textContent='Menyimpan…'}
+ const p={id_input:original.id_input,periode:document.getElementById('ePeriode').value,direktorat:document.getElementById('eDir').value,id_kegiatan:targetId,pic:document.getElementById('ePIC').value.trim(),deadline:document.getElementById('eDeadline').value,pagu:Number(document.getElementById('ePagu').value)||0,target:Number(document.getElementById('eTarget').value)||0,real:Number(document.getElementById('eReal').value)||0,outputTarget:Number(document.getElementById('eOutTarget').value)||0,outputReal:Number(document.getElementById('eOutReal').value)||0,kendala:document.getElementById('eKendala').value.trim(),tindak:document.getElementById('eTindak').value.trim()};
+ if(!p.pic||!p.id_kegiatan){alert('Kegiatan dan Nama PIC wajib diisi.');if(btn){btn.disabled=false;btn.textContent='Simpan Perubahan'}return;}
+ const r=await api('updatePICInput',p); if(r&&r.ok){closePICEdit();alert('Data PIC berhasil diperbarui.');await loadAll()}else alert((r&&r.message)||'Perubahan belum berhasil disimpan.'); if(btn){btn.disabled=false;btn.textContent='Simpan Perubahan'}
+}
+async function confirmPIC(id){if(!confirm('Konfirmasi bahwa data PIC ini telah diperiksa?'))return;const r=await api('confirmPICInput',{id_input:id});if(r&&r.ok){await loadAll();}else alert((r&&r.message)||'Data belum dapat dikonfirmasi.')}
+async function deletePIC(id){if(!confirm('Hapus data PIC ini? Data yang dihapus tidak dapat dipulihkan dari sistem.'))return;const r=await api('deletePICInput',{id_input:id});if(r&&r.ok){alert('Data PIC berhasil dihapus.');await loadAll();}else alert((r&&r.message)||'Data belum berhasil dihapus.')}
+
 function openModal(){document.getElementById('modal').classList.remove('hidden');document.body.classList.add('locked');document.getElementById('accessCode').focus();}
 function closeModal(){if(state.access){document.getElementById('modal').classList.add('hidden');}}
 function allowedViews(role){
@@ -192,7 +240,7 @@ async function access(){
  msg.textContent='Memeriksa akses...';
  const r=await api('validateAccess',{code,role:state.selectedRole});
  if(!r.ok){msg.textContent=r.message||'Kode akses tidak sesuai.';return;}
- state.role=state.selectedRole;state.access=true;
+ state.role=state.selectedRole;state.access=true;state.accessCode=code;
  state.view=state.role==='PIC'?'pic':(state.role==='PIMPINAN'?'report':'dashboard');
  document.body.classList.remove('locked');
  document.getElementById('modal').classList.add('hidden');
@@ -206,7 +254,7 @@ document.querySelectorAll('.role-card').forEach(b=>b.addEventListener('click',()
 document.getElementById('accessBtn').onclick=openModal;
 document.getElementById('closeModal')?.addEventListener('click',()=>{});
 document.getElementById('doAccess').onclick=access;
-document.getElementById('logoutBtn').onclick=()=>{state.access=false;state.role='';state.view='pic';document.body.classList.add('locked');document.getElementById('modal').classList.remove('hidden');document.getElementById('roleLabel').textContent='Pengguna';document.getElementById('roleSub').textContent='Belum masuk';document.getElementById('accessCode').value='';document.getElementById('accessMsg').textContent='';applyRoleUI();};
+document.getElementById('logoutBtn').onclick=()=>{state.access=false;state.role='';state.accessCode='';state.view='pic';document.body.classList.add('locked');document.getElementById('modal').classList.remove('hidden');document.getElementById('roleLabel').textContent='Pengguna';document.getElementById('roleSub').textContent='Belum masuk';document.getElementById('accessCode').value='';document.getElementById('accessMsg').textContent='';applyRoleUI();};
 function tick(){document.getElementById('clock').textContent=new Intl.DateTimeFormat('id-ID',{dateStyle:'full',timeStyle:'short'}).format(new Date())+' WIB'}setInterval(tick,1000);tick();
 document.body.classList.add('locked');
 applyRoleUI();
