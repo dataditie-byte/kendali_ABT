@@ -137,7 +137,6 @@ function doGet(e){
       out={ok:good,role,message:good?'Akses diterima.':'Kode akses tidak sesuai untuk peran yang dipilih.'};
     }
     else if(p.api==='getBootstrapData') out=getBootstrapData();
-    else if(p.api==='getPICHistory') out={ok:true,rows:rows_('PIC_INPUT').slice(-100).reverse()};
     else if(p.api==='savePICInput') out=savePICInput_(JSON.parse(p.payload||'{}'));
     else if(p.api==='saveGeneric') out=saveGeneric_(p.key,JSON.parse(p.payload||'{}'));
     else if(p.api==='getReport') out=getBootstrapData();

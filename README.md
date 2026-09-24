@@ -1,58 +1,63 @@
-# SISTEM PENGENDALIAN ABT 2026 — FINAL-2.2.2
+# SISTEM PENGENDALIAN ABT 2026 — FINAL-3.0
 
-Frontend GitHub Pages + Google Apps Script + Google Sheets.
+Frontend GitHub Pages + Google Apps Script + Google Sheets untuk Pengendalian ABT 2026 Deputi Bidang Pencegahan BNN.
 
-## Perubahan FINAL-2.2.2
+## Prinsip FINAL-3.0
 
-### 1. Akses wajib sebelum sistem terbuka
-Saat URL dibuka, **dashboard tidak ditampilkan**. Pengguna langsung melihat halaman **Akses Sistem** dan harus memilih peran serta memasukkan kode akses.
+Versi ini **tidak menggunakan data contoh/demo** dan **tidak menampilkan riwayat input PIC** pada frontend. Dashboard, laporan, dan form PIC membaca data melalui Google Apps Script dari Google Sheets.
 
-### 2. Pemisahan hak akses
-- **PIC Kegiatan** → hanya menu **Input Data PIC**.
-- **Pengendali** → hanya **Dashboard Ringkas** dan **Laporan**.
-- **Pimpinan / Laporan** → **Dashboard Ringkas** dan **Laporan**, dengan tampilan awal Laporan.
+### Hak akses
+- **PIC Kegiatan** — kode `PIC2026`; hanya **Input Data PIC**.
+- **Pengendali** — kode `kendali2026`; **Dashboard lengkap + seluruh modul pengendalian**.
+- **Pimpinan / Laporan** — kode `kendali2026`; hanya **Laporan**.
 
-Modul Kartu Kendali, Rencana & Realisasi, Monitoring Mingguan, Hambatan, Corrective Action, Risk Register, dan Master Data tidak ditampilkan pada akun PIC/Pengendali/Pimpinan melalui frontend publik.
+### Dropdown Input PIC
+- Periode: September 2026, Oktober 2026, Nopember 2026, Desember 2026.
+- Direktorat: Direktorat Informasi & Edukasi; Direktorat Advokasi.
 
-### 3. Logo BNN
-Logo BNN menggunakan file resmi yang diberikan pada percakapan ini: `assets/logo-bnn.webp`.
-
-## Arsitektur
+## Alur data
 
 ```text
-GitHub Pages
-    |
-    | JSONP API
-    v
-Google Apps Script (Code.gs)
-    |
-    v
+GitHub Pages / app.js
+        |
+        | JSONP
+        v
+Google Apps Script / Code.gs
+        |
+        v
 Google Sheets — Database ABT 2026
+        |
+        v
+Dashboard / Laporan / Input PIC
 ```
 
-## Instalasi
+Tidak ada data demo/fallback. Jika API belum terhubung, sistem menampilkan pesan konfigurasi API dan tidak mengarang angka.
 
-1. Buat **Spreadsheet BARU** khusus Pengendalian ABT 2026.
+## Instalasi backend
+
+1. Gunakan Spreadsheet khusus Pengendalian ABT 2026.
 2. Buka **Extensions → Apps Script**.
 3. Salin `Code.gs` dari paket ini.
-4. Jalankan fungsi `setup()` / fungsi inisialisasi yang tersedia pada `Code.gs` sampai sheet database terbentuk.
-5. Deploy sebagai **Web app**:
-   - Execute as: **Me**
-   - Who has access: sesuai kebijakan organisasi (untuk GitHub Pages dapat menggunakan akses publik dengan kode akses aplikasi).
-6. Salin URL `/exec` hasil deployment.
-7. Buka `config.js` dan isi:
+4. Jalankan fungsi `setup()` / inisialisasi yang tersedia sampai struktur sheet terbentuk.
+5. Deploy sebagai **Web app**.
+6. Salin URL deployment yang berakhiran `/exec`.
+
+## Konfigurasi frontend
+
+Buka `config.js` dan isi: 
 
 ```javascript
-const API_URL = 'URL_WEB_APP_APPS_SCRIPT_ANDA';
-const DEMO_MODE = false;
+const API_URL = 'https://script.google.com/macros/s/XXXXXXXXXXXX/exec';
+const APP_VERSION = 'ABT-2026-FINAL-3.0.0';
 ```
 
-8. Upload seluruh folder ke GitHub Pages.
+**Jangan menambahkan `DEMO_MODE`.** FINAL-3.0 memang tidak mempunyai mode demo.
 
-## Database
+Kemudian upload seluruh file ke GitHub Pages.
 
-Backend menyediakan struktur sheet ABT, antara lain:
+## Database backend
 
+Backend menggunakan sheet utama ABT, termasuk:
 - `01_MASTER_KEGIATAN`
 - `02_MASTER_ANGGARAN`
 - `03_KEBUTUHAN_DANA`
@@ -68,26 +73,25 @@ Backend menyediakan struktur sheet ABT, antara lain:
 - `13_DASHBOARD`
 - `14_INPUT_PIC`
 
-## Catatan PIC
-
-Form PIC pada versi ini sengaja dibatasi hanya pada fungsi input PIC. Dashboard dan modul pengendalian tidak menjadi ruang kerja PIC.
-
-Jika terdapat **Excel Sheet 1 khusus yang menjadi acuan field PIC**, mapping field tersebut harus dijadikan sumber kebenaran sebelum produksi final. Paket ini menggunakan schema PIC yang sudah tersedia pada database ABT (`14_INPUT_PIC`) sebagai baseline teknis.
+`14_INPUT_PIC` tetap menjadi tempat penyimpanan input PIC. Yang dihapus adalah **tampilan riwayat input di frontend**, bukan penyimpanan data yang sudah diinput.
 
 ## Baseline RKK
 
-Baseline awal yang tersedia berasal dari RKK CEGAH ABT T.A. 2026 dengan total alokasi **Rp12.364.101.000**. Data aktual pencairan, belanja, monitoring, hambatan, dan tindak lanjut dibaca dari sheet masing-masing.
+Baseline RKK CEGAH ABT T.A. 2026 menggunakan total alokasi **Rp12.364.101.000**. Data aktual tidak berasal dari angka demo; data dibaca dari database Spreadsheet.
 
-## Keamanan
+## Kode akses FINAL-3.0
 
-Kode akses frontend bukan pengganti autentikasi organisasi. Untuk penggunaan resmi dengan data sensitif, deployment Apps Script sebaiknya dibatasi sesuai akun/organisasi BNN atau ditambah mekanisme autentikasi yang sesuai.
+```text
+PIC          = PIC2026
+PENGENDALI   = kendali2026
+PIMPINAN     = kendali2026
+```
 
-## Hak Akses FINAL-2.2
+Kode akses juga diperiksa oleh `Code.gs`, bukan hanya oleh tampilan frontend.
 
-- **PIC Kegiatan** — kode `PIC2026`; hanya menu **Input Data PIC**.
-- **Pengendali** — kode `kendali2026`; membuka **Dashboard lengkap** dan seluruh modul pengendalian.
-- **Pimpinan / Laporan** — kode `kendali2026`; hanya **Laporan ringkas**.
+## Catatan produksi
 
-Dropdown Input PIC:
-- Periode: September 2026, Oktober 2026, Nopember 2026, Desember 2026.
-- Direktorat: Direktorat Informasi & Edukasi; Direktorat Advokasi.
+- Setelah mengganti `Code.gs`, lakukan **Deploy → Manage deployments → Edit → New version** pada Web App.
+- Pastikan URL frontend menggunakan file FINAL-3.0.
+- Jika browser/HP masih menampilkan file lama, versi query pada `config.js` dan `app.js` sudah dinaikkan ke `3.0.0` untuk membantu menghindari cache.
+- Jangan memasukkan data contoh ke Spreadsheet produksi.
