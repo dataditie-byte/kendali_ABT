@@ -1,13 +1,13 @@
 /*******************************************************
- SISTEM PENGENDALIAN ABT 2026 — FINAL-2
+ SISTEM PENGENDALIAN ABT 2026 — FINAL-2.2
  Backend: Google Apps Script + Google Sheets
  Frontend: GitHub Pages
 *******************************************************/
 const CFG = {
   SPREADSHEET_ID: '', // kosong jika script dibuat dari Spreadsheet ABT baru
   TZ: 'Asia/Jakarta',
-  VERSION: 'ABT-2026-FINAL-2.0',
-  ACCESS_CODE: 'kendali2026'
+  VERSION: 'ABT-2026-FINAL-2.2',
+  ACCESS_CODES: { PIC: 'PIC2026', PENGENDALI: 'kendali2026', PIMPINAN: 'kendali2026' }
 };
 
 const SHEETS = {
@@ -128,7 +128,14 @@ function doGet(e){
   const p=(e&&e.parameter)||{}; let out;
   try{
     if(!p.api) out={ok:true,version:CFG.VERSION,message:'ABT API aktif'};
-    else if(p.api==='validateAccess') { const q=JSON.parse(p.payload||'{}'); const good=String(q.code||p.code||'')===CFG.ACCESS_CODE; out={ok:good,message:good?'Akses diterima.':'Kode akses tidak sesuai.'}; }
+    else if(p.api==='validateAccess') {
+      const q=JSON.parse(p.payload||'{}');
+      const role=String(q.role||p.role||'').toUpperCase();
+      const code=String(q.code||p.code||'');
+      const expected=CFG.ACCESS_CODES[role]||'';
+      const good=!!expected && code===expected;
+      out={ok:good,role,message:good?'Akses diterima.':'Kode akses tidak sesuai untuk peran yang dipilih.'};
+    }
     else if(p.api==='getBootstrapData') out=getBootstrapData();
     else if(p.api==='getPICHistory') out={ok:true,rows:rows_('PIC_INPUT').slice(-100).reverse()};
     else if(p.api==='savePICInput') out=savePICInput_(JSON.parse(p.payload||'{}'));

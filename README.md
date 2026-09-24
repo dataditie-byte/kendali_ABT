@@ -1,8 +1,8 @@
-# SISTEM PENGENDALIAN ABT 2026 — FINAL-2.1
+# SISTEM PENGENDALIAN ABT 2026 — FINAL-2.2.2
 
 Frontend GitHub Pages + Google Apps Script + Google Sheets.
 
-## Perubahan FINAL-2.1
+## Perubahan FINAL-2.2.2
 
 ### 1. Akses wajib sebelum sistem terbuka
 Saat URL dibuka, **dashboard tidak ditampilkan**. Pengguna langsung melihat halaman **Akses Sistem** dan harus memilih peran serta memasukkan kode akses.
@@ -81,3 +81,13 @@ Baseline awal yang tersedia berasal dari RKK CEGAH ABT T.A. 2026 dengan total al
 ## Keamanan
 
 Kode akses frontend bukan pengganti autentikasi organisasi. Untuk penggunaan resmi dengan data sensitif, deployment Apps Script sebaiknya dibatasi sesuai akun/organisasi BNN atau ditambah mekanisme autentikasi yang sesuai.
+
+## Hak Akses FINAL-2.2
+
+- **PIC Kegiatan** — kode `PIC2026`; hanya menu **Input Data PIC**.
+- **Pengendali** — kode `kendali2026`; membuka **Dashboard lengkap** dan seluruh modul pengendalian.
+- **Pimpinan / Laporan** — kode `kendali2026`; hanya **Laporan ringkas**.
+
+Dropdown Input PIC:
+- Periode: September 2026, Oktober 2026, Nopember 2026, Desember 2026.
+- Direktorat: Direktorat Informasi & Edukasi; Direktorat Advokasi.

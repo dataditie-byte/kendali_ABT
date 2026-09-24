@@ -71,7 +71,7 @@ function esc(s){return String(s??'').replace(/[&<>"']/g,m=>({'&':'&amp;','<':'&l
 async function api(action,payload={}){
   if(DEMO_MODE||!API_URL)return demoFor(action,payload);
   const cb='abt_cb_'+Date.now()+'_'+Math.floor(Math.random()*10000);
-  const extra = action==='validateAccess' ? '&code='+encodeURIComponent(payload.code||'') : ''; const q='?api='+encodeURIComponent(action)+'&callback='+cb+extra+(action==='validateAccess'?'':'&payload='+encodeURIComponent(JSON.stringify(payload||{})));
+  const extra = action==='validateAccess' ? '&code='+encodeURIComponent(payload.code||'')+'&role='+encodeURIComponent(payload.role||'') : ''; const q='?api='+encodeURIComponent(action)+'&callback='+cb+extra+(action==='validateAccess'?'':'&payload='+encodeURIComponent(JSON.stringify(payload||{})));
   return new Promise(resolve=>{
     let done=false;
     const finish=x=>{if(done)return;done=true;try{delete window[cb];}catch(e){};if(script)script.remove();resolve(x||{ok:false,message:'Respons kosong.'});};
@@ -83,7 +83,7 @@ async function api(action,payload={}){
 function demoFor(action,p){
   if(action==='getBootstrapData')return {...demo,version:APP_VERSION};
   if(action==='getPICHistory')return {ok:true,rows:demo.pic};
-  if(action==='validateAccess')return {ok:String(p.code||'')==='kendali2026',message:String(p.code||'')==='kendali2026'?'Akses diterima.':'Kode akses tidak sesuai.'};
+  if(action==='validateAccess'){const role=String(p.role||'').toUpperCase();const codes={PIC:'PIC2026',PENGENDALI:'kendali2026',PIMPINAN:'kendali2026'};const good=String(p.code||'')===codes[role];return {ok:good,message:good?'Akses diterima.':'Kode akses tidak sesuai untuk peran yang dipilih.'};}
   if(action==='savePICInput'){demo.pic.unshift({...p});return {ok:true,message:'Data PIC tersimpan (mode demo).'};}
   return {ok:true,message:'Data tersimpan (mode demo).'};
 }
@@ -126,11 +126,11 @@ function activityTable(rows){return `<div class="table-wrap"><table class="data-
 
 function picView(){
  const d=data(), acts=d.activities||[];
- return `<div class="page-title"><div><h2>Input Data PIC</h2><p>PIC hanya mengisi data kegiatan. Dashboard dan modul pengendalian tidak ditampilkan pada akun PIC.</p></div></div>
+ return `<div class="page-title"><div><h2>Input Data PIC</h2><p>PIC hanya mengisi data kegiatan. Dashboard lengkap dan modul pengendalian tidak ditampilkan pada akun PIC.</p></div></div>
  <section class="panel"><div class="notice"><b>Ruang input PIC:</b> data identitas kegiatan, target anggaran, realisasi anggaran, target output, realisasi output, kendala utama dan tindak lanjut. Persentase dihitung otomatis oleh sistem.</div>
  <div class="form-grid">
-  <div class="field"><label>Periode</label><input id="fPeriode" value="September 2026"></div>
-  <div class="field"><label>Direktorat / Unit</label><input id="fDir" placeholder="Nama direktorat/unit"></div>
+  <div class="field"><label>Bulan / Periode</label><select id="fPeriode"><option value="September 2026">September 2026</option><option value="Oktober 2026">Oktober 2026</option><option value="Nopember 2026">Nopember 2026</option><option value="Desember 2026">Desember 2026</option></select></div>
+  <div class="field"><label>Direktorat</label><select id="fDir"><option value="Direktorat Informasi & Edukasi">Direktorat Informasi &amp; Edukasi</option><option value="Direktorat Advokasi">Direktorat Advokasi</option></select></div>
   <div class="field full"><label>Kegiatan</label><select id="fKegiatan">${acts.map(x=>`<option value="${esc(x.id||x.kode)}">${esc(x.kode)} — ${esc(x.nama)}</option>`).join('')}</select></div>
   <div class="field"><label>Nama PIC</label><input id="fPIC" placeholder="Nama PIC"></div>
   <div class="field"><label>Deadline</label><input id="fDeadline" type="date"></div>
@@ -184,8 +184,8 @@ function openModal(){document.getElementById('modal').classList.remove('hidden')
 function closeModal(){if(state.access){document.getElementById('modal').classList.add('hidden');}}
 function allowedViews(role){
  if(role==='PIC') return ['pic'];
- if(role==='PENGENDALI') return ['dashboard','report'];
- if(role==='PIMPINAN') return ['dashboard','report'];
+ if(role==='PENGENDALI') return ['dashboard','kendali','realisasi','monitoring','hambatan','action','risk','master','report','docs'];
+ if(role==='PIMPINAN') return ['report'];
  return [];
 }
 function applyRoleUI(){
@@ -198,7 +198,7 @@ async function access(){
  const code=document.getElementById('accessCode').value.trim(),msg=document.getElementById('accessMsg');
  if(!code){msg.textContent='Kode akses wajib diisi.';return;}
  msg.textContent='Memeriksa akses...';
- const r=await api('validateAccess',{code});
+ const r=await api('validateAccess',{code,role:state.selectedRole});
  if(!r.ok){msg.textContent=r.message||'Kode akses tidak sesuai.';return;}
  state.role=state.selectedRole;state.access=true;
  state.view=state.role==='PIC'?'pic':(state.role==='PIMPINAN'?'report':'dashboard');

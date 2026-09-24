@@ -14,9 +14,17 @@
       <div><b>Sistem Pengendalian</b><strong>ABT 2026</strong><span>Deputi Bidang Pencegahan</span></div>
     </div>
     <nav id="nav">
-      <button data-view="dashboard" data-roles="PENGENDALI,PIMPINAN" class="nav-item">⌂ <span>Dashboard Ringkas</span></button>
+      <button data-view="dashboard" data-roles="PENGENDALI" class="nav-item">⌂ <span>Dashboard Pengendali</span></button>
       <button data-view="pic" data-roles="PIC" class="nav-item">▣ <span>Input Data PIC</span></button>
+      <button data-view="kendali" data-roles="PENGENDALI" class="nav-item">▤ <span>Kartu Kendali</span></button>
+      <button data-view="realisasi" data-roles="PENGENDALI" class="nav-item">◫ <span>Rencana &amp; Realisasi</span></button>
+      <button data-view="monitoring" data-roles="PENGENDALI" class="nav-item">◷ <span>Monitoring Mingguan</span></button>
+      <button data-view="hambatan" data-roles="PENGENDALI" class="nav-item">⚠ <span>Hambatan &amp; Root Cause</span></button>
+      <button data-view="action" data-roles="PENGENDALI" class="nav-item">✓ <span>Corrective Action</span></button>
+      <button data-view="risk" data-roles="PENGENDALI" class="nav-item">◇ <span>Risk Register</span></button>
+      <button data-view="master" data-roles="PENGENDALI" class="nav-item">☷ <span>Master Data</span></button>
       <button data-view="report" data-roles="PENGENDALI,PIMPINAN" class="nav-item">▥ <span>Laporan</span></button>
+      <button data-view="docs" data-roles="PENGENDALI" class="nav-item">▧ <span>Dokumentasi</span></button>
     </nav>
     <div class="side-user">
       <div class="avatar">●</div>
@@ -59,8 +67,8 @@
     <p class="access-intro">Pilih peran Anda terlebih dahulu. Dashboard dan data sistem tidak ditampilkan sebelum akses berhasil.</p>
     <div class="role-grid">
       <button class="role-card selected" data-role="PIC">PIC Kegiatan<small>Hanya input dan pembaruan data PIC</small></button>
-      <button class="role-card" data-role="PENGENDALI">Pengendali<small>Dashboard ringkas dan laporan pengendalian</small></button>
-      <button class="role-card" data-role="PIMPINAN">Pimpinan / Laporan<small>Dashboard ringkas dan laporan siap cetak</small></button>
+      <button class="role-card" data-role="PENGENDALI">Pengendali<small>Dashboard lengkap dan seluruh modul pengendalian</small></button>
+      <button class="role-card" data-role="PIMPINAN">Pimpinan / Laporan<small>Laporan ringkas untuk pimpinan</small></button>
     </div>
     <label>Kode Akses<input id="accessCode" type="password" placeholder="Masukkan kode akses" autocomplete="off"></label>
     <button class="primary wide" id="doAccess">Masuk Sistem</button>
