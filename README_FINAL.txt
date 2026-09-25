@@ -1,22 +1,18 @@
-SISTEM PENGENDALIAN ABT 2026 — FINAL 4.0
+SISTEM PENGENDALIAN ABT 2026 — FINAL 5.0
 
-Isi paket:
-- index.html : antarmuka aplikasi
-- styles.css : tampilan responsif
-- app.js     : logika frontend dan alur peran
-- config.js  : konfigurasi URL layanan dan versi
-- Code.gs    : backend Google Apps Script
+PAKET FULL / BASELINE BARU
+- Tampilan dikembalikan ke gaya versi awal: logo BNN, hero gedung BNN, identitas War On Drugs for Humanity dan Indonesia Bersinar.
+- PIC: bootstrap ringan hanya Master Kegiatan + Anggaran; detail keuangan diambil saat memilih kegiatan.
+- Kegiatan selalu ditampilkan sebagai KODE — NAMA KEGIATAN, dengan tujuan, sasaran, output dan target master.
+- Pagu PIC selalu dihitung dari Master Anggaran, tidak diinput manual.
+- Data PIC baru berstatus BELUM DIPERIKSA.
+- Pengendali dapat melihat, mengedit, mengonfirmasi dan menghapus data PIC. Edit mengembalikan status BELUM DIPERIKSA.
+- Dashboard, Kartu Kendali, Rencana & Realisasi, Monitoring, Hambatan, Corrective Action, Risk Register, Master Data, Laporan dan Dokumentasi tersedia.
+- Loading Pengendali dibuat per modul agar login tidak menarik seluruh database sekaligus.
+- Tidak ada Code.js. Backend tunggal adalah Code.gs.
 
-ALUR FINAL:
-RKK/Master -> PIC -> Data Masuk PIC -> Pemeriksaan Pengendali -> Konfirmasi -> Dashboard/Kartu Kendali/Monitoring -> Hambatan -> Corrective Action -> Risk Register -> Laporan.
+GITHUB PAGES: index.html, styles.css, app.js, config.js, assets/
+APPS SCRIPT: Code.gs
+URL API dipertahankan sesuai deployment yang sudah digunakan.
 
-PENTING:
-1. Pagu kegiatan dihitung dari Master Anggaran; PIC tidak dapat mengetik/mengubah Pagu.
-2. Data PIC baru berstatus BELUM DIPERIKSA.
-3. Edit Pengendali mengembalikan status menjadi BELUM DIPERIKSA.
-4. Konfirmasi Pengendali mengubah status menjadi DIKONFIRMASI.
-5. Hapus PIC dicatat pada LOG AKTIVITAS.
-6. KPI yang datanya belum tersedia ditampilkan sebagai tanda — pada frontend.
-7. Periode PIC dibatasi September, Oktober, Nopember, Desember 2026.
-8. Jalankan setup()/initializeSystem() pada project Apps Script sebelum digunakan bila sheet belum siap.
-9. Setelah Code.gs diperbarui, deploy versi Web App baru pada deployment yang dipakai config.js.
+Catatan: jalankan setup() hanya jika struktur sheet belum tersedia. Jangan menjalankan setup berulang jika database produksi sudah ada.
