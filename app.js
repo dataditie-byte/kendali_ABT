@@ -1,5 +1,9 @@
 (() => {
 'use strict';
+// ABT 2026 FRONTEND 9.0 — SAFE ANALYTIC LAYER
+// Code.gs tidak diubah. Dashboard baseline tetap dari Spreadsheet Kendali;
+// Data PIC dan histori/analisis pengendalian berasal dari Spreadsheet PIC.
+
 const C=window.ABT_CONFIG;
 const state={role:'',selectedRole:'PIC',access:false,code:'',view:'pic',data:{},cache:{},loading:false,error:'',picRequest:0,requestSeq:0};
 const $=s=>document.querySelector(s), esc=v=>String(v??'').replace(/[&<>"']/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]));
@@ -37,35 +41,68 @@ function setLoading(v){state.loading=v;render()}
 async function access(){const code=$('#accessCode').value.trim();if(!code){$('#accessMsg').textContent='Kode akses wajib diisi.';return}$('#accessMsg').textContent='Memeriksa akses…';const r=await api('validateAccess',{role:state.selectedRole,code});if(!r.ok){$('#accessMsg').textContent=r.message||'Kode akses tidak sesuai.';return}state.role=state.selectedRole;state.code=code;state.access=true;try{sessionStorage.setItem('abt_access',JSON.stringify({role:state.role,code:state.code}))}catch(e){};state.view=state.role==='PIC'?'pic':state.role==='PIMPINAN'?'report':'dashboard';document.body.classList.remove('locked');$('#modal').classList.add('hidden');$('#accessCode').value='';$('#roleLabel').textContent=state.role==='PENGENDALI'?'Tim Pengendali':state.role==='PIMPINAN'?'Pimpinan / Laporan':'PIC Kegiatan';$('#roleSub').textContent='Akses aktif';drawNav();await initialLoad()}
 async function initialLoad(){
   setLoading(true);
-  const apiName=state.role==='PIC'?'getPICBootstrapData':state.role==='PIMPINAN'?'getLightReport':'getMasterData';
-  const r=await api(apiName);
-  state.loading=false;
-  if(!r.ok){state.error=r.message||'Data belum dapat dibaca.';render();return}
-  if(state.role==='PIC'){state.data=r;render();return}
-  if(state.role==='PIMPINAN'){state.data=r;state.cache.report=r;render();return}
-  // Pengendali: master tampil segera; dashboard diambil setelah UI sudah hidup.
-  state.data={activities:r.activities||[],summary:r.summary||{}};render();
-  setTimeout(()=>loadModule('dashboard'),40);
+  try{
+    if(state.role==='PIC'){
+      const r=await api('getPICBootstrapData');
+      state.loading=false;
+      if(!r.ok){state.error=r.message||'Data belum dapat dibaca.';render();return}
+      state.data=r;render();return;
+    }
+    if(state.role==='PIMPINAN'){
+      const [r,p]=await Promise.all([api('getLightReport'),api('getPICInbox')]);
+      state.loading=false;
+      if(!r.ok){state.error=r.message||'Data laporan belum dapat dibaca.';render();return}
+      state.data=r;state.cache.report=r;state.cache.inbox=p.ok?p:null;
+      render();return;
+    }
+    // PENGENDALI:
+    // Dashboard = tetap memakai Spreadsheet Kendali sebagai sumber baseline keuangan.
+    // Data PIC = hanya dari Spreadsheet PIC untuk monitoring/analisis pengendalian.
+    const [d,p]=await Promise.all([api('getDashboardData'),api('getPICInbox')]);
+    state.loading=false;
+    if(!d.ok){state.error=d.message||'Data Dashboard belum dapat dibaca.';render();return}
+    if(!p.ok){state.error=p.message||'Data PIC belum dapat dibaca.';render();return}
+    state.data=Object.assign({},d,{picInbox:p.picInbox||[],picActivities:p.activities||[]});
+    state.cache.dashboard=d;
+    state.cache.inbox=p;
+    render();
+  }catch(e){
+    state.loading=false;state.error=e?.message||'Data awal tidak dapat dimuat.';render();
+  }
 }
 
 async function loadModule(v){
-  const map={dashboard:'getDashboardData',inbox:'getPICInbox',kendali:'getKartuKendali',realisasi:'getRealisasi',monitoring:'getMonitoring',hambatan:'getHambatan',action:'getCorrectiveAction',risk:'getRiskRegister',master:'getMasterData',report:'getReport',docs:'getDokumentasi'};
-  const apiName=map[v];
-  if(!apiName)return;
-  state.loading=true;
-  state.error='';
-  render();
+  // Semua modul pengendalian dibaca dari data yang sudah dimuat.
+  // Hanya modul Master/Laporan/Dokumentasi yang tetap meminta API masing-masing.
+  state.loading=true;state.error='';render();
   try{
-    const r=await api(apiName,{code:state.code});
-    state.loading=false;
-    if(!r.ok){state.error=r.message||'Data belum dapat dibaca.';render();return}
-    state.cache[v]=r;
-    if(v==='dashboard')state.data=r;
-    render();
+    if(v==='dashboard'){
+      const [d,p]=await Promise.all([api('getDashboardData'),api('getPICInbox')]);
+      if(!d.ok)throw new Error(d.message||'Dashboard belum dapat dibaca.');
+      if(!p.ok)throw new Error(p.message||'Data PIC belum dapat dibaca.');
+      state.cache.dashboard=d;state.cache.inbox=p;
+      state.data=Object.assign({},d,{picInbox:p.picInbox||[],picActivities:p.activities||[]});
+    }else if(v==='inbox'){
+      const p=await api('getPICInbox');if(!p.ok)throw new Error(p.message||'Data PIC belum dapat dibaca.');
+      state.cache.inbox=p;state.data=Object.assign({},state.data,{picInbox:p.picInbox||[],picActivities:p.activities||[]});
+    }else if(v==='master'){
+      const r=await api('getMasterData',{code:state.code});if(!r.ok)throw new Error(r.message||'Master Data belum dapat dibaca.');state.cache.master=r;
+    }else if(v==='docs'){
+      const r=await api('getDokumentasi',{code:state.code});if(!r.ok)throw new Error(r.message||'Dokumentasi belum dapat dibaca.');state.cache.docs=r;
+    }else if(v==='report'){
+      const [d,p]=await Promise.all([api('getReport',{code:state.code}),api('getPICInbox')]);
+      if(!d.ok)throw new Error(d.message||'Laporan belum dapat dibaca.');
+      if(!p.ok)throw new Error(p.message||'Data PIC belum dapat dibaca.');
+      state.cache.report=d;state.cache.inbox=p;state.data=Object.assign({},d,{picInbox:p.picInbox||[],picActivities:p.activities||[]});
+    }else{
+      // Kartu Kendali s.d. Risk Register adalah hasil olahan dari input PIC.
+      // Tidak ada input ulang yang dibuat di sini.
+      const p=await api('getPICInbox');if(!p.ok)throw new Error(p.message||'Data PIC belum dapat dibaca.');
+      state.cache.inbox=p;state.data=Object.assign({},state.data,{picInbox:p.picInbox||[],picActivities:p.activities||[]});
+    }
+    state.loading=false;render();
   }catch(e){
-    state.loading=false;
-    state.error=e?.message||'Modul tidak dapat ditampilkan.';
-    render();
+    state.loading=false;state.error=e?.message||'Modul tidak dapat ditampilkan.';render();
   }
 }
 function refresh(){state.cache={};loadModule(state.view)}
@@ -77,77 +114,215 @@ function render(){
   if(state.error){$('#content').innerHTML=`<section class="panel error-panel"><h3>Data belum tersedia</h3><p>${esc(state.error)}</p><button class="secondary" onclick="refresh()">↻ Coba Lagi</button></section>`;return}
   try{$('#content').innerHTML=fn()}catch(e){state.error=e?.message||'Tampilan modul mengalami kesalahan.';console.error('ABT render error:',e);$('#content').innerHTML=`<section class="panel error-panel"><h3>Modul tidak dapat ditampilkan</h3><p>${esc(state.error)}</p><button class="secondary" onclick="refresh()">↻ Coba Lagi</button></section>`}
 }
-function dashboard(){
- const d=state.data||{},s=d.summary||{},m=d.monthly||[],a=d.activities||[],att=d.attention||[],c=d.control||{},st=c.status||{},subs=c.subactivities||[],recs=c.recommendations||[];
- const max=Math.max(...m.flatMap(x=>[Number(x.p)||0,Number(x.c)||0,Number(x.r)||0]),1);
- const target=Number(c.totalTarget||0),real=Number(c.totalReal||0),outT=Number(c.totalOutputTarget||0),outR=Number(c.totalOutputReal||0);
- const realPct=target?pct(real/target*100):0, outPct=outT?pct(outR/outT*100):0;
- const critical=recs.filter(x=>x.level==='KRITIS'), attention=recs.filter(x=>x.level==='PERHATIAN');
- const bar=(v,mx)=>Math.max(0,Math.min(100,mx?Number(v)/mx*100:0));
- return `<div class="page-title"><div><h2>Dashboard Pengendalian ABT 2026</h2><p>Dashboard membaca hasil olahan data PIC, histori mingguan, data keuangan dan analisis pengendalian.</p></div><div class="toolbar"><button class="secondary" onclick="refresh()">↻ Perbarui</button><button class="primary" onclick="window.print()">Cetak</button></div></div>
- <div class="cards">
-  <div class="metric blue"><div class="label">Total Pagu</div><div class="value">${rup(s.pagu)}</div><div class="sub">Baseline anggaran</div></div>
-  <div class="metric green"><div class="label">Realisasi Belanja</div><div class="value">${rup(s.belanja)}</div><div class="sub">${pct(safePct(s.belanja,s.pagu))} dari pagu</div></div>
-  <div class="metric amber"><div class="label">Subkegiatan Terpantau</div><div class="value">${Number(c.latestCount||0)}</div><div class="sub">berdasarkan input PIC</div></div>
-  <div class="metric green"><div class="label">🟢 Hijau</div><div class="value">${Number(st.HIJAU||0)}</div><div class="sub">terkendali</div></div>
-  <div class="metric amber"><div class="label">🟡 Kuning</div><div class="value">${Number(st.KUNING||0)}</div><div class="sub">perlu perhatian</div></div>
-  <div class="metric orange"><div class="label">🔴 Merah</div><div class="value">${Number(st.MERAH||0)}</div><div class="sub">perlu intervensi</div></div>
- </div>
- <div class="grid2">
-  <section class="panel"><div class="panel-head"><h3>Tren Keuangan</h3><span class="muted">Kumulatif per bulan</span></div><div class="chart"><div class="bars">${m.map(x=>`<div class="bar-group"><div class="bar plan" title="Rencana ${rup(x.p)}" style="height:${bar(x.p,max)}%"></div><div class="bar cair" title="Pencairan ${rup(x.c)}" style="height:${bar(x.c,max)}%"></div><div class="bar real" title="Belanja ${rup(x.r)}" style="height:${bar(x.r,max)}%"></div></div>`).join('')}</div><div class="months">${m.map(x=>`<span>${esc(x.m)}</span>`).join('')}</div></div><div class="kpi-note"><span class="dot a"></span>Rencana <span class="dot" style="background:#278fe0"></span>Pencairan <span class="dot g"></span>Belanja</div></section>
-  <section class="panel"><div class="panel-head"><h3>Status Pengendalian</h3><span class="muted">Data PIC terbaru</span></div><div class="report-grid"><div class="report-box"><span>Hijau</span><b>${st.HIJAU||0}</b></div><div class="report-box"><span>Kuning</span><b>${st.KUNING||0}</b></div><div class="report-box"><span>Merah</span><b>${st.MERAH||0}</b></div><div class="report-box"><span>Belum terklasifikasi</span><b>${st.LAIN||0}</b></div></div><div class="muted" style="margin-top:12px">Status mengikuti data laporan PIC dan histori terakhir yang tersedia.</div></section>
- </div>
- <div class="grid2">
-  <section class="panel"><div class="panel-head"><h3>Rencana & Realisasi dari PIC</h3><span class="muted">${rup(real)} / ${rup(target)}</span></div><div class="progress-row"><div class="progress-label"><span>Realisasi Anggaran</span><b>${target?pct(real/target*100):0}%</b></div><div class="track"><div class="fill" style="width:${Math.min(100,Math.max(0,target?real/target*100:0))}%"></div></div></div><div class="progress-row"><div class="progress-label"><span>Realisasi Output</span><b>${target?outT?pct(outR/outT*100):0:0}%</b></div><div class="track"><div class="fill" style="width:${Math.min(100,Math.max(0,outT?outR/outT*100:0))}%"></div></div></div><div class="report-grid"><div class="report-box"><span>Target Anggaran PIC</span><b>${rup(target)}</b></div><div class="report-box"><span>Realisasi Anggaran PIC</span><b>${rup(real)}</b></div><div class="report-box"><span>Target Output</span><b>${outT.toLocaleString('id-ID')}</b></div><div class="report-box"><span>Realisasi Output</span><b>${outR.toLocaleString('id-ID')}</b></div></div></section>
-  <section class="panel"><div class="panel-head"><h3>Prioritas Tindakan Pengendali</h3><span class="muted">Mesin rekomendasi</span></div>${critical.length?critical.slice(0,5).map(x=>`<div style="padding:10px 0;border-bottom:1px solid #edf2f6"><b style="color:#b42318">🔴 ${esc(x.subKegiatan)}</b><div class="muted">PIC: ${esc(x.pic)} · ${esc(x.pekan)}</div><div style="font-size:12px;margin-top:4px">${esc(x.rekomendasi)}</div></div>`).join(''):attention.length?attention.slice(0,5).map(x=>`<div style="padding:10px 0;border-bottom:1px solid #edf2f6"><b>🟡 ${esc(x.subKegiatan)}</b><div class="muted">PIC: ${esc(x.pic)} · ${esc(x.pekan)}</div><div style="font-size:12px;margin-top:4px">${esc(x.rekomendasi)}</div></div>`).join(''):'<div class="empty">Tidak ada rekomendasi intervensi berdasarkan data PIC terbaru.</div>'}</section>
- </div>
- <div class="grid2">
-  <section class="panel"><div class="panel-head"><h3>Tren Monitoring Mingguan</h3><span class="muted">Target vs realisasi PIC</span></div>${c.weekly&&c.weekly.length?c.weekly.slice(-8).map(x=>`<div class="progress-row"><div class="progress-label"><span>${esc(x.periode)} · ${x.jumlah} laporan</span><b>${x.outputPct}% output</b></div><div class="track"><div class="fill" style="width:${Math.min(100,Math.max(0,x.outputPct))}%"></div></div><div class="muted" style="font-size:10px;margin-top:3px">Anggaran ${rup(x.realisasi)} / ${rup(x.target)} · Output ${Number(x.outputReal||0).toLocaleString('id-ID')} / ${Number(x.outputTarget||0).toLocaleString('id-ID')}</div></div>`).join(''):'<div class="empty">Belum ada histori mingguan dari PIC.</div>'}</section>
-  <section class="panel"><div class="panel-head"><h3>Perhatian</h3><span class="muted">${att.length} item</span></div>${att.length?att.slice(0,8).map(x=>`<div style="padding:9px 0;border-bottom:1px solid #edf2f6"><b>${esc(x.kode)}</b><div style="font-size:11px;margin-top:3px">${esc(x.problem)}</div><div class="muted">${esc(x.impact)} · ${status(x.status)}</div></div>`).join(''):'<div class="empty">Tidak ada perhatian dari data kendali saat ini.</div>'}</section>
- </div>
- <section class="panel"><div class="panel-head"><h3>Subkegiatan Terbaru</h3><button class="secondary" onclick="showView('inbox')">Buka Data Masuk PIC</button></div><div class="table-wrap"><table class="data-table"><thead><tr><th>Sub Kegiatan</th><th>PIC</th><th>Pekan</th><th>Target</th><th>Realisasi</th><th>Output</th><th>Status</th></tr></thead><tbody>${subs.slice(0,15).map(x=>`<tr><td><b>${esc(x.subKegiatan)}</b></td><td>${esc(x.pic)}</td><td>${esc(x.pekan)}</td><td>${rup(x.target)}</td><td>${rup(x.real)}</td><td>${Number(x.outputReal||0).toLocaleString('id-ID')} / ${Number(x.outputTarget||0).toLocaleString('id-ID')}</td><td>${status(x.status)}</td></tr>`).join('')||'<tr><td colspan="7" class="empty">Belum ada data PIC.</td></tr>'}</tbody></table></div></section>`}
 
-function picView(){
- const acts=state.data.activities||[],dd=state.data.dropdown||{};
- const opts=(arr,placeholder)=>`<option value="">${placeholder}</option>${(arr||[]).map(x=>`<option value="${esc(x)}">${esc(x)}</option>`).join('')}`;
- return `<div class="page-title"><div><h2>Input Data PIC</h2><p>Isi laporan pelaksanaan. Pilihan Direktorat, RO dan Komponen mengikuti daftar yang tersedia.</p></div></div>
- <section class="panel"><div class="hint-card"><b>Identitas sub kegiatan</b><br>Pilih kegiatan yang sama pada setiap pekan agar perkembangan dapat dibaca sebagai satu rangkaian progress.</div>
- <div class="form-grid">
- <div class="field"><label>Pekan Laporan<select id="pPeriode"><option>September 2026</option><option>Oktober 2026</option><option>Nopember 2026</option><option>Desember 2026</option></select></label></div>
- <div class="field"><label>Direktorat<select id="pDir">${opts(dd.direktorat,'Pilih Direktorat')}</select></label></div>
- <div class="field"><label>RO<select id="pRO">${opts(dd.ro,'Pilih RO')}</select></label></div>
- <div class="field"><label>Komponen<select id="pKomponen">${opts(dd.komponen,'Pilih Komponen')}</select></label></div>
- <div class="field"><label>Nama PIC<input id="pPIC" placeholder="Nama personel PIC"></label></div>
- <div class="field"><label>Deadline Kegiatan<input id="pDeadline" type="date"></label></div>
- <div class="field full"><label>Pilih Sub Kegiatan<select id="pKegiatan"><option value="">Pilih sub kegiatan</option>${acts.map(x=>`<option value="${esc(x.id_kegiatan)}" data-ro="${esc(x.kode_ro||'')}" data-komponen="${esc(x.kode_komponen||'')}">${esc(x.kode||x.id_kegiatan)} — ${esc(x.nama_kegiatan)}</option>`).join('')}</select></label><span class="help">Sub kegiatan menjadi identitas progress antarpekan.</span></div>
- </div><div id="picContext" class="activity-context hidden"></div><div id="picFields" class="hidden"><div class="section-title"><h3 style="margin:18px 0 8px">Kondisi Periode Berjalan</h3></div><div class="form-grid">
- <div class="field"><label>Target Anggaran (Rp)<input id="pTargetA" inputmode="numeric" placeholder="0"></label></div>
- <div class="field"><label>Realisasi Anggaran (Rp)<input id="pRealA" inputmode="numeric" placeholder="0"></label></div>
- <div class="field"><label>Target Output<input id="pTargetO" type="number" min="0" placeholder="0"></label></div>
- <div class="field"><label>Realisasi Output<input id="pRealO" type="number" min="0" placeholder="0"></label></div>
- <div class="field full"><label>Kendala Utama<textarea id="pKendala" placeholder="Tuliskan kendala bila ada."></textarea></label></div>
- <div class="field full"><label>Tindak Lanjut<textarea id="pTindak" placeholder="Tuliskan tindak lanjut yang dilakukan/direncanakan."></textarea></label></div>
- <div class="field full"><label>Catatan Perwabku<input id="pCatatan" placeholder="Catatan tambahan"></label></div></div>
- <div class="form-actions"><button class="primary" id="savePicBtn">Simpan Data PIC</button></div><div id="picMsg" class="msg"></div></div></section>`}
-async function loadPICContext(){const id=$('#pKegiatan').value;if(!id){$('#picContext').classList.add('hidden');$('#picFields').classList.add('hidden');return}const req=++state.picRequest;const a=(state.data.activities||[]).find(x=>String(x.id_kegiatan)===String(id))||{};$('#picContext').classList.remove('hidden');$('#picFields').classList.add('hidden');$('#picContext').innerHTML=`<section class="panel"><div class="context-head"><div><div class="context-code">${esc(a.id_kegiatan||id)}</div><div class="context-name">${esc(a.nama_kegiatan||'Nama kegiatan')}</div></div></div><div class="context-grid"><div class="context-box"><small>Tujuan</small><b>${esc(a.tujuan||'—')}</b></div><div class="context-box"><small>Sasaran</small><b>${esc(a.sasaran||'—')}</b></div><div class="context-box"><small>Output</small><b>${esc(a.output||'—')}</b></div><div class="context-box"><small>Target Master</small><b>${esc(a.target_volume||'—')} ${esc(a.satuan||'')}</b></div><div class="context-box"><small>Pagu Kegiatan</small><b>${rup(a.pagu)}</b></div></div></section>`;try{const r=await api('getPICContext',{id_kegiatan:id,periode:$('#pPeriode').value});if(req!==state.picRequest||$('#pKegiatan').value!==id)return;if(!r.ok)throw new Error(r.message);const f=r.finance||{},m=r.master||{},l=r.latest||{};$('#picContext').innerHTML=`<section class="panel"><div class="context-head"><div><div class="context-code">${esc(m.id_kegiatan||id)}</div><div class="context-name">${esc(m.nama_kegiatan||'Nama kegiatan')}</div></div></div><div class="context-grid"><div class="context-box"><small>Tujuan</small><b>${esc(m.tujuan||'—')}</b></div><div class="context-box"><small>Sasaran</small><b>${esc(m.sasaran||'—')}</b></div><div class="context-box"><small>Output</small><b>${esc(m.output||'—')}</b></div><div class="context-box"><small>Target Master</small><b>${esc(m.target_volume||'—')} ${esc(m.satuan||'')}</b></div><div class="context-box"><small>Pagu Kegiatan</small><b>${rup(f.pagu)}</b></div><div class="context-box"><small>Realisasi Sebelumnya</small><b>${rup(f.belanja)}</b></div><div class="context-box"><small>Sisa Pagu</small><b>${rup(f.sisa)}</b></div><div class="context-box"><small>Rencana Pencairan</small><b>${rup(f.rencana)}</b></div><div class="context-box"><small>Pencairan Aktual</small><b>${rup(f.cair)}</b></div><div class="context-box"><small>Realisasi PIC Terakhir</small><b>${l.realisasi_output_jumlah??'—'}</b></div></div></section>`;$('#picFields').classList.remove('hidden')}catch(e){if(req!==state.picRequest||$('#pKegiatan').value!==id)return;$('#picContext').innerHTML=`<section class="panel error-panel"><h3>Data kegiatan belum dapat dibaca</h3><p>${esc(e.message)}</p><button class="secondary" onclick="loadPICContext()">↻ Coba lagi</button></section>`}}
-function filterPICActivities(){
- const ro=$('#pRO')?.value||'', sel=$('#pKegiatan'); if(!sel)return;
- const m=ro.match(/\.([A-Z]+)\.(\d+)\s*-?/); const code=m?(m[1]+m[2]):'';
- Array.from(sel.options).forEach((o,i)=>{if(i===0){o.hidden=false;return}const rc=o.dataset.ro||'';o.hidden=!!code&&rc!==code;});
- if(sel.value&&sel.selectedOptions[0]?.hidden)sel.value='';
+/* =========================
+   LAPIS ANALISIS DATA PIC
+   Sumber: Spreadsheet PIC melalui getPICInbox
+   Dashboard baseline keuangan tetap dari Spreadsheet Kendali.
+   ========================= */
+const PIC_PERIODS=['September 2026','Oktober 2026','Nopember 2026','November 2026','Desember 2026'];
+const periodRank=p=>{
+  const s=String(p||'').toLowerCase().trim();
+  const i=PIC_PERIODS.findIndex(x=>x.toLowerCase()===s);
+  return i<0?99:i;
+};
+const picKey=x=>String(x?.subkegiatan_id||x?.id_kegiatan||x?.kode||x?.nama_kegiatan||x?.kegiatan||'').trim();
+const picStatus=x=>{
+  const s=String(x?.status||'').toUpperCase().trim();
+  if(s==='HIJAU'||s==='KUNING'||s==='MERAH')return s;
+  const t=num(x?.target_anggaran_nominal),r=num(x?.realisasi_anggaran_nominal);
+  const to=num(x?.target_output_jumlah),ro=num(x?.realisasi_output_jumlah);
+  const dev=t?((r/t)-(num(x?.target_anggaran_persen)||0)):0;
+  const out=to?ro/to:0;
+  if(dev>=-0.05&&out>=0.90)return'HIJAU';
+  if(dev>=-0.15&&out>=0.70)return'KUNING';
+  return'MERAH';
+};
+function picAnalysis(){
+  const rows=((state.cache.inbox||{}).picInbox||state.data.picInbox||[]).filter(x=>x&&(x.id_input||x.id_kegiatan||x.subkegiatan_id||x.nama_kegiatan));
+  const sorted=rows.slice().sort((a,b)=>{
+    const pr=periodRank(a.periode)-periodRank(b.periode);
+    if(pr)return pr;
+    return String(a.timestamp||'').localeCompare(String(b.timestamp||''));
+  });
+  const latestMap={};
+  sorted.forEach(x=>{const k=picKey(x);if(k)latestMap[k]=x});
+  const latest=Object.values(latestMap);
+  const statusCount={HIJAU:0,KUNING:0,MERAH:0,LAIN:0};
+  latest.forEach(x=>{const s=picStatus(x);if(statusCount[s]!==undefined)statusCount[s]++;else statusCount.LAIN++});
+  const weekly={};
+  sorted.forEach(x=>{
+    const p=String(x.periode||'').trim()||'Periode belum diisi';
+    if(!weekly[p])weekly[p]={periode:p,jumlah:0,target:0,real:0,outputTarget:0,outputReal:0,deviasi:0};
+    const w=weekly[p];w.jumlah++;w.target+=num(x.target_anggaran_nominal);w.real+=num(x.realisasi_anggaran_nominal);w.outputTarget+=num(x.target_output_jumlah);w.outputReal+=num(x.realisasi_output_jumlah);w.deviasi+=num(x.deviasi_persen);
+  });
+  const weeklyRows=Object.values(weekly).sort((a,b)=>periodRank(a.periode)-periodRank(b.periode)||String(a.periode).localeCompare(String(b.periode)));
+  weeklyRows.forEach(w=>{w.outputPct=w.outputTarget?safePct(w.outputReal,w.outputTarget):0;w.realPct=w.target?safePct(w.real,w.target):0});
+  const totals=latest.reduce((o,x)=>{
+    o.target+=num(x.target_anggaran_nominal);o.real+=num(x.realisasi_anggaran_nominal);
+    o.outputTarget+=num(x.target_output_jumlah);o.outputReal+=num(x.realisasi_output_jumlah);
+    o.pagu+=num(x.pagu_abt);return o;
+  },{pagu:0,target:0,real:0,outputTarget:0,outputReal:0});
+  const recommendations=latest.map(x=>{
+    const s=picStatus(x),kendala=String(x.kendala_utama||'').trim(),tindak=String(x.tindak_lanjut||'').trim();
+    let level='TERKENDALI',text='Lanjutkan pelaksanaan dan monitoring mingguan.';
+    if(s==='MERAH'){level='KRITIS';text='Segera lakukan klarifikasi deviasi anggaran/output dan tetapkan rencana pemulihan dengan PIC.'}
+    else if(s==='KUNING'){level='PERHATIAN';text='Lakukan monitoring lebih dekat dan minta PIC memastikan tindak lanjut sampai periode berikutnya.'}
+    if(kendala)text+=' Kendala PIC: '+kendala+'.';
+    if(tindak)text+=' Tindak lanjut tercatat: '+tindak+'.';
+    return{key:picKey(x),subKegiatan:x.nama_kegiatan||x.kegiatan||x.id_kegiatan||x.subkegiatan_id||'-',pic:x.pic||'-',pekan:x.periode||'-',status:s,level,rekomendasi:text,target:num(x.target_anggaran_nominal),real:num(x.realisasi_anggaran_nominal),outputTarget:num(x.target_output_jumlah),outputReal:num(x.realisasi_output_jumlah),kendala,tindak};
+  }).sort((a,b)=>(({KRITIS:0,PERHATIAN:1,TERKENDALI:2}[a.level]||9)-({KRITIS:0,PERHATIAN:1,TERKENDALI:2}[b.level]||9)));
+  const hambatan=latest.filter(x=>String(x.kendala_utama||'').trim()).map(x=>({kode:x.id_kegiatan||x.subkegiatan_id||x.kode||'-',subKegiatan:x.nama_kegiatan||x.kegiatan||'-',masalah:x.kendala_utama,root:'Perlu klarifikasi kepada PIC',dampak:picStatus(x)==='MERAH'?'Berpotensi mengganggu target anggaran/output':'Perlu dipantau',level:picStatus(x),status:'OPEN',pic:x.pic||'-',periode:x.periode||'-'}));
+  const actions=recommendations.filter(x=>x.level!=='TERKENDALI').map(x=>({kode:x.key,subKegiatan:x.subKegiatan,temuan:x.status==='MERAH'?'Status MERAH berdasarkan laporan PIC':'Status KUNING berdasarkan laporan PIC',tindakan:x.rekomendasi,pic:x.pic,deadline:'Periode berikutnya',status:'PROSES'}));
+  const risks=recommendations.filter(x=>x.level!=='TERKENDALI').map(x=>({kode:x.key,risiko:x.status==='MERAH'?'Keterlambatan/ketidaktercapaian target':'Potensi deviasi pelaksanaan',penyebab:x.kendala||'Belum ada kendala yang dijelaskan',prob:x.status==='MERAH'?'TINGGI':'SEDANG',dampak:x.status==='MERAH'?'TINGGI':'SEDANG',level:x.status,mitigasi:x.rekomendasi,pic:x.pic,status:'OPEN'}));
+  return {rows,latest,statusCount,weeklyRows,totals,recommendations,hambatan,actions,risks};
 }
-async function savePIC(){const a=state.data.activities||[],sel=a.find(x=>String(x.id_kegiatan)===$('#pKegiatan').value)||{};const p={periode:$('#pPeriode').value,direktorat:$('#pDir').value,ro:$('#pRO').value,komponen:$('#pKomponen').value,id_kegiatan:$('#pKegiatan').value,kegiatan:sel.nama_kegiatan||'',pic:$('#pPIC').value.trim(),deadline:$('#pDeadline').value,target_anggaran_nominal:num($('#pTargetA').value),realisasi_anggaran_nominal:num($('#pRealA').value),target_output_jumlah:num($('#pTargetO').value),realisasi_output_jumlah:num($('#pRealO').value),kendala_utama:$('#pKendala').value.trim(),tindak_lanjut:$('#pTindak').value.trim(),catatan_pembaku:$('#pCatatan').value.trim(),sumber_input:'PIC'};if(!p.direktorat||!p.ro||!p.komponen||!p.id_kegiatan||!p.pic){$('#picMsg').textContent='Direktorat, RO, Komponen, Sub Kegiatan dan Nama PIC wajib diisi.';return}const b=$('#savePicBtn');b.disabled=true;b.textContent='Menyimpan…';$('#picMsg').textContent='';const r=await api('savePICInput',p);b.disabled=false;b.textContent='Simpan Data PIC';$('#picMsg').textContent=r.ok?'Data tersimpan dan langsung diproses ke sistem pengendalian.':(r.message||'Data belum berhasil disimpan.');if(r.ok){$('#pTargetA').value='';$('#pRealA').value='';$('#pTargetO').value='';$('#pRealO').value='';$('#pKendala').value='';$('#pTindak').value='';$('#pCatatan').value='';}}
-function inboxView(){const d=state.cache.inbox||state.data||{},rows=d.picInbox||[];return `<div class="page-title"><div><h2>Data Masuk PIC</h2><p>Data PIC yang tersimpan langsung diproses sebagai data pengendalian.</p></div><div class="toolbar"><button class="secondary" onclick="refresh()">↻ Perbarui</button></div></div><section class="panel"><div class="table-wrap"><table class="data-table"><thead><tr><th>Periode</th><th>Direktorat</th><th>Kegiatan</th><th>PIC</th><th>Pagu</th><th>Target</th><th>Realisasi</th><th>Output</th><th>Status</th><th>Aksi</th></tr></thead><tbody>${rows.length?rows.map(x=>`<tr><td>${esc(x.periode)}</td><td>${esc(x.direktorat)}</td><td><b>${esc(x.id_kegiatan)}</b><br>${esc(x.nama_kegiatan||'')}</td><td>${esc(x.pic||'-')}</td><td>${rup(x.pagu_abt)}</td><td>${rup(x.target_anggaran_nominal)}</td><td>${rup(x.realisasi_anggaran_nominal)}</td><td>${num(x.realisasi_output_jumlah)} / ${num(x.target_output_jumlah)}</td><td>${status(x.status)}</td><td><div class="table-actions"><button class="secondary small-btn" onclick="editPIC('${esc(x.id_input)}')">Edit</button><button class="danger small-btn" onclick="deletePIC('${esc(x.id_input)}')">Hapus</button></div></td></tr>`).join(''):'<tr><td colspan="10" class="empty">Belum ada data PIC.</td></tr>'}</tbody></table></div></section>`}
+function septemberChartData(base,analysis){
+  const names=['September 2026','Oktober 2026','Nopember 2026','Desember 2026'];
+  const by={};analysis.weeklyRows.forEach(w=>{by[w.periode]=w});
+  return names.map(name=>({m:name.replace(' 2026',''),target:by[name]?.target||0,real:by[name]?.real||0,outputTarget:by[name]?.outputTarget||0,outputReal:by[name]?.outputReal||0}));
+}
+function analysisTableRows(a){
+  return a.latest.map(x=>{
+    const s=picStatus(x);
+    return `<tr><td>${esc(x.periode||'-')}</td><td><b>${esc(x.subkegiatan_id||x.id_kegiatan||x.kode||'-')}</b><br>${esc(x.nama_kegiatan||x.kegiatan||'-')}</td><td>${esc(x.pic||'-')}</td><td>${rup(x.target_anggaran_nominal)}</td><td>${rup(x.realisasi_anggaran_nominal)}</td><td>${pct(x.target_output_jumlah?safePct(x.realisasi_output_jumlah,x.target_output_jumlah):0)}</td><td>${status(s)}</td></tr>`;
+  }).join('');
+}
+function dashboard(){
+  const d=state.cache.dashboard||state.data||{},s=d.summary||{},a=picAnalysis(),c=a.statusCount;
+  const chart=septemberChartData(d,a);
+  const max=Math.max(...chart.flatMap(x=>[x.target,x.real]),1);
+  const target=a.totals.target,real=a.totals.real,outT=a.totals.outputTarget,outR=a.totals.outputReal;
+  const critical=a.recommendations.filter(x=>x.level==='KRITIS'),attention=a.recommendations.filter(x=>x.level==='PERHATIAN');
+  const bar=v=>Math.max(0,Math.min(100,(Number(v)||0)/max*100));
+  return `<div class="page-title"><div><h2>Dashboard Pengendalian ABT 2026</h2><p>Baseline keuangan tetap berasal dari Spreadsheet Kendali; progres, status dan analisis pelaksanaan berasal dari laporan PIC.</p></div><div class="toolbar"><button class="secondary" onclick="refresh()">↻ Perbarui</button><button class="primary" onclick="window.print()">Cetak</button></div></div>
+  <div class="cards">
+    <div class="metric blue"><div class="label">Total Pagu Kendali</div><div class="value">${rup(s.pagu)}</div><div class="sub">Baseline anggaran</div></div>
+    <div class="metric green"><div class="label">Realisasi Belanja Kendali</div><div class="value">${rup(s.belanja)}</div><div class="sub">Data keuangan Kendali</div></div>
+    <div class="metric amber"><div class="label">Subkegiatan PIC</div><div class="value">${a.latest.length}</div><div class="sub">laporan terbaru</div></div>
+    <div class="metric green"><div class="label">🟢 Hijau</div><div class="value">${c.HIJAU}</div><div class="sub">terkendali</div></div>
+    <div class="metric amber"><div class="label">🟡 Kuning</div><div class="value">${c.KUNING}</div><div class="sub">perlu perhatian</div></div>
+    <div class="metric orange"><div class="label">🔴 Merah</div><div class="value">${c.MERAH}</div><div class="sub">perlu intervensi</div></div>
+  </div>
+  <div class="grid2">
+    <section class="panel"><div class="panel-head"><h3>Tren ABT September–Desember 2026</h3><span class="muted">Target vs realisasi laporan PIC</span></div>
+      <div class="chart"><div class="bars">${chart.map(x=>`<div class="bar-group"><div class="bar plan" title="Target ${rup(x.target)}" style="height:${bar(x.target)}%"></div><div class="bar real" title="Realisasi ${rup(x.real)}" style="height:${bar(x.real)}%"></div></div>`).join('')}</div><div class="months">${chart.map(x=>`<span>${esc(x.m)}</span>`).join('')}</div></div>
+      <div class="kpi-note"><span class="dot a"></span>Target Anggaran <span class="dot g"></span>Realisasi Anggaran</div>
+    </section>
+    <section class="panel"><div class="panel-head"><h3>Status Pengendalian</h3><span class="muted">Laporan Pelaksanaan terbaru per subkegiatan</span></div>
+      <div class="report-grid"><div class="report-box"><span>Hijau</span><b>${c.HIJAU}</b></div><div class="report-box"><span>Kuning</span><b>${c.KUNING}</b></div><div class="report-box"><span>Merah</span><b>${c.MERAH}</b></div><div class="report-box"><span>Total</span><b>${a.latest.length}</b></div></div>
+      <div class="muted" style="margin-top:12px">Status mengikuti laporan pelaksanaan terbaru.</div>
+    </section>
+  </div>
+  <div class="grid2">
+    <section class="panel"><div class="panel-head"><h3>Rencana & Realisasi dari PIC</h3><span class="muted">${rup(real)} / ${rup(target)}</span></div>
+      <div class="progress-row"><div class="progress-label"><span>Realisasi Anggaran</span><b>${target?pct(safePct(real,target)):0}%</b></div><div class="track"><div class="fill" style="width:${Math.min(100,Math.max(0,target?real/target*100:0))}%"></div></div></div>
+      <div class="progress-row"><div class="progress-label"><span>Realisasi Output</span><b>${outT?pct(safePct(outR,outT)):0}%</b></div><div class="track"><div class="fill" style="width:${Math.min(100,Math.max(0,outT?outR/outT*100:0))}%"></div></div></div>
+      <div class="report-grid"><div class="report-box"><span>Target Anggaran PIC</span><b>${rup(target)}</b></div><div class="report-box"><span>Realisasi Anggaran PIC</span><b>${rup(real)}</b></div><div class="report-box"><span>Target Output</span><b>${outT.toLocaleString('id-ID')}</b></div><div class="report-box"><span>Realisasi Output</span><b>${outR.toLocaleString('id-ID')}</b></div></div>
+    </section>
+    <section class="panel"><div class="panel-head"><h3>Prioritas Tindakan Pengendali</h3><span class="muted">Analisis otomatis</span></div>
+      ${critical.concat(attention).slice(0,6).map(x=>`<div style="padding:10px 0;border-bottom:1px solid #edf2f6"><b>${x.level==='KRITIS'?'🔴':'🟡'} ${esc(x.subKegiatan)}</b><div class="muted">PIC: ${esc(x.pic)} · ${esc(x.pekan)}</div><div style="font-size:12px;margin-top:4px">${esc(x.rekomendasi)}</div></div>`).join('')||'<div class="empty">Tidak ada rekomendasi intervensi dari laporan pelaksanaan terbaru.</div>'}
+    </section>
+  </div>
+  <section class="panel"><div class="panel-head"><h3>Ringkasan Laporan Pelaksanaan</h3><button class="secondary" onclick="showView('inbox')">Buka Data Masuk PIC</button></div>
+    <div class="table-wrap"><table class="data-table"><thead><tr><th>Pekan</th><th>Sub Kegiatan</th><th>PIC</th><th>Target Anggaran</th><th>Realisasi</th><th>Output</th><th>Status</th></tr></thead><tbody>${analysisTableRows(a)||'<tr><td colspan="7" class="empty">Belum ada data pelaksanaan.</td></tr>'}</tbody></table></div>
+  </section>`;
+}
+function picView(){const acts=state.data.activities||[];return `<div class="page-title"><div><h2>Input Data PIC</h2><p>PIC memilih kegiatan berdasarkan kode <b>dan nama kegiatan</b>. Pagu diambil otomatis dari Master Anggaran.</p></div></div><section class="panel"><div class="hint-card"><b>Cara membaca kode kegiatan:</b> kode adalah identitas unik pada Master RKK. Nama kegiatan di samping kode menjelaskan substansi kegiatan, sehingga PIC tidak perlu menghafal arti kode.</div><div class="form-grid"><div class="field"><label>Periode<select id="pPeriode"><option>September 2026</option><option>Oktober 2026</option><option>Nopember 2026</option><option>Desember 2026</option></select></label></div><div class="field"><label>Direktorat<select id="pDir"><option>Direktorat Informasi & Edukasi</option><option>Direktorat Advokasi</option></select></label></div><div class="field"><label>Nama PIC<input id="pPIC" placeholder="Nama personel PIC"></label></div><div class="field"><label>Deadline Kegiatan<input id="pDeadline" type="date"></label></div><div class="field full"><label>Pilih Kegiatan<select id="pKegiatan"><option value="">Pilih kode — nama kegiatan</option>${acts.map(x=>`<option value="${esc(x.id_kegiatan)}">${esc(x.id_kegiatan)} — ${esc(x.nama_kegiatan)}</option>`).join('')}</select></label><span class="help">Pilihan menampilkan kode dan nama kegiatan agar jelas pada layar HP maupun laptop.</span></div></div><div id="picContext" class="activity-context hidden"></div><div id="picFields" class="hidden"><div class="section-title"><h3 style="margin:18px 0 8px">Kondisi Periode Berjalan</h3></div><div class="form-grid"><div class="field"><label>Target Anggaran (Rp)<input id="pTargetA" inputmode="numeric" placeholder="0"></label></div><div class="field"><label>Realisasi Anggaran (Rp)<input id="pRealA" inputmode="numeric" placeholder="0"></label></div><div class="field"><label>Target Output<input id="pTargetO" type="number" min="0" placeholder="0"></label></div><div class="field"><label>Realisasi Output<input id="pRealO" type="number" min="0" placeholder="0"></label></div><div class="field full"><label>Kendala Utama<textarea id="pKendala" placeholder="Tuliskan kendala bila ada."></textarea></label></div><div class="field full"><label>Tindak Lanjut<textarea id="pTindak" placeholder="Tuliskan tindak lanjut yang dilakukan/direncanakan."></textarea></label></div><div class="field full"><label>Catatan<input id="pCatatan" placeholder="Catatan tambahan"></label></div></div><div class="form-actions"><button class="primary" id="savePicBtn">Simpan Data PIC</button></div><div id="picMsg" class="msg"></div></div></section>`}
+async function loadPICContext(){const id=$('#pKegiatan').value;if(!id){$('#picContext').classList.add('hidden');$('#picFields').classList.add('hidden');return}const req=++state.picRequest;const a=(state.data.activities||[]).find(x=>String(x.id_kegiatan)===String(id))||{};$('#picContext').classList.remove('hidden');$('#picFields').classList.add('hidden');$('#picContext').innerHTML=`<section class="panel"><div class="context-head"><div><div class="context-code">${esc(a.id_kegiatan||id)}</div><div class="context-name">${esc(a.nama_kegiatan||'Nama kegiatan')}</div></div></div><div class="context-grid"><div class="context-box"><small>Tujuan</small><b>${esc(a.tujuan||'—')}</b></div><div class="context-box"><small>Sasaran</small><b>${esc(a.sasaran||'—')}</b></div><div class="context-box"><small>Output</small><b>${esc(a.output||'—')}</b></div><div class="context-box"><small>Target Master</small><b>${esc(a.target_volume||'—')} ${esc(a.satuan||'')}</b></div><div class="context-box"><small>Pagu Kegiatan</small><b>${rup(a.pagu)}</b></div></div></section>`;try{const r=await api('getPICContext',{id_kegiatan:id,periode:$('#pPeriode').value});if(req!==state.picRequest||$('#pKegiatan').value!==id)return;if(!r.ok)throw new Error(r.message);const f=r.finance||{},m=r.master||{},l=r.latest||{};$('#picContext').innerHTML=`<section class="panel"><div class="context-head"><div><div class="context-code">${esc(m.id_kegiatan||id)}</div><div class="context-name">${esc(m.nama_kegiatan||'Nama kegiatan')}</div></div></div><div class="context-grid"><div class="context-box"><small>Tujuan</small><b>${esc(m.tujuan||'—')}</b></div><div class="context-box"><small>Sasaran</small><b>${esc(m.sasaran||'—')}</b></div><div class="context-box"><small>Output</small><b>${esc(m.output||'—')}</b></div><div class="context-box"><small>Target Master</small><b>${esc(m.target_volume||'—')} ${esc(m.satuan||'')}</b></div><div class="context-box"><small>Pagu Kegiatan</small><b>${rup(f.pagu)}</b></div><div class="context-box"><small>Realisasi Sebelumnya</small><b>${rup(f.belanja)}</b></div><div class="context-box"><small>Sisa Pagu</small><b>${rup(f.sisa)}</b></div><div class="context-box"><small>Rencana Pencairan</small><b>${rup(f.rencana)}</b></div><div class="context-box"><small>Pencairan Aktual</small><b>${rup(f.cair)}</b></div><div class="context-box"><small>Realisasi PIC Terakhir</small><b>${l.realisasi_output_jumlah??'—'}</b></div></div></section>`;$('#picFields').classList.remove('hidden')}catch(e){if(req!==state.picRequest||$('#pKegiatan').value!==id)return;$('#picContext').innerHTML=`<section class="panel error-panel"><h3>Data kegiatan belum dapat dibaca</h3><p>${esc(e.message)}</p><button class="secondary" onclick="loadPICContext()">↻ Coba lagi</button></section>`}}
+async function savePIC(){const p={periode:$('#pPeriode').value,direktorat:$('#pDir').value,id_kegiatan:$('#pKegiatan').value,pic:$('#pPIC').value.trim(),deadline:$('#pDeadline').value,target_anggaran_nominal:num($('#pTargetA').value),realisasi_anggaran_nominal:num($('#pRealA').value),target_output_jumlah:num($('#pTargetO').value),realisasi_output_jumlah:num($('#pRealO').value),kendala_utama:$('#pKendala').value.trim(),tindak_lanjut:$('#pTindak').value.trim(),catatan_pembaku:$('#pCatatan').value.trim(),sumber_input:'PIC'};if(!p.id_kegiatan||!p.pic){$('#picMsg').textContent='Nama PIC dan kegiatan wajib diisi.';return}const b=$('#savePicBtn');b.disabled=true;b.textContent='Menyimpan…';$('#picMsg').textContent='';const r=await api('savePICInput',p);b.disabled=false;b.textContent='Simpan Data PIC';$('#picMsg').textContent=r.ok?'Data tersimpan dan langsung diproses ke sistem pengendalian.':(r.message||'Data belum berhasil disimpan.');if(r.ok){$('#pTargetA').value='';$('#pRealA').value='';$('#pTargetO').value='';$('#pRealO').value='';$('#pKendala').value='';$('#pTindak').value='';$('#pCatatan').value='';}}
+function inboxView(){
+  const d=state.cache.inbox||state.data||{};
+  const rows=Array.isArray(d.picInbox)?d.picInbox:[];
+  const v=(x,...keys)=>{for(const k of keys){if(x&&x[k]!==undefined&&x[k]!==null&&x[k]!=='')return x[k]}return ''};
+  const headers=[
+    'No','Direktorat','RO','Komponen','Kegiatan','Tujuan','Sasaran','Deadline/Timeline','PIC','Pagu ABT',
+    'Target Anggaran Nominal','Target Anggaran %','Realisasi Anggaran Nominal','Realisasi Anggaran %','Deviasi %',
+    'Target Output Jumlah','Target Output %','Realisasi Output Jumlah','Realisasi Output %','Status',
+    'Kendala Utama','Tindak Lanjut','Catatan Perwabku','Keterangan'
+  ];
+  const body=rows.map(x=>`<tr>
+    <td>${esc(v(x,'no')||'')}</td>
+    <td>${esc(v(x,'direktorat')||'')}</td>
+    <td>${esc(v(x,'ro')||'')}</td>
+    <td>${esc(v(x,'komponen')||'')}</td>
+    <td><b>${esc(v(x,'kegiatan','nama_kegiatan')||'')}</b></td>
+    <td>${esc(v(x,'tujuan')||'')}</td>
+    <td>${esc(v(x,'sasaran')||'')}</td>
+    <td>${esc(v(x,'deadline')||'')}</td>
+    <td>${esc(v(x,'pic')||'')}</td>
+    <td>${rup(v(x,'pagu_abt'))}</td>
+    <td>${rup(v(x,'target_anggaran_nominal'))}</td>
+    <td>${pct(v(x,'target_anggaran_persen'))}</td>
+    <td>${rup(v(x,'realisasi_anggaran_nominal'))}</td>
+    <td>${pct(v(x,'realisasi_anggaran_persen'))}</td>
+    <td>${pct(v(x,'deviasi_persen'))}</td>
+    <td>${num(v(x,'target_output_jumlah'))}</td>
+    <td>${pct(v(x,'target_output_persen'))}</td>
+    <td>${num(v(x,'realisasi_output_jumlah'))}</td>
+    <td>${pct(v(x,'realisasi_output_persen'))}</td>
+    <td>${status(v(x,'status')||'')}</td>
+    <td>${esc(v(x,'kendala_utama')||'')}</td>
+    <td>${esc(v(x,'tindak_lanjut')||'')}</td>
+    <td>${esc(v(x,'catatan_pembaku','catatan_perwabku')||'')}</td>
+    <td>${esc(v(x,'keterangan')||'')}</td>
+  </tr>`).join('');
+  return `<div class="page-title"><div><h2>Data Masuk PIC</h2><p>Laporan pelaksanaan yang telah diterima dan menjadi dasar pengolahan pengendalian.</p></div><div class="toolbar"><button class="secondary" onclick="refresh()">↻ Perbarui</button></div></div>
+  <section class="panel"><div class="table-wrap"><table class="data-table"><thead><tr>${headers.map(h=>`<th>${h}</th>`).join('')}</tr></thead><tbody>${body||`<tr><td colspan="${headers.length}" class="empty">Belum ada data pelaksanaan.</td></tr>`}</tbody></table></div></section>`;
+}
 function tablePage(title,desc,headers,rows,empty='Belum ada data.',addKey='') {return `<div class="page-title"><div><h2>${title}</h2><p>${desc}</p></div><div class="toolbar"><button class="secondary" onclick="refresh()">↻ Perbarui</button>${addKey?`<button class="primary" onclick="openGeneric('${addKey}')">+ Tambah Data</button>`:''}</div></div><section class="panel"><div class="table-wrap"><table class="data-table"><thead><tr>${headers.map(h=>`<th>${h}</th>`).join('')}</tr></thead><tbody>${rows.length?rows.join(''):`<tr><td colspan="${headers.length}" class="empty">${empty}</td></tr>`}</tbody></table></div></section>`}
-function kendaliView(){const d=state.cache.kendali||{},rows=d.kendali||[];return tablePage('Kartu Kendali','Perbandingan target dan realisasi kegiatan untuk pengendalian.',['Kode','Kegiatan','Target Anggaran','Realisasi','Deviasi','Status'],rows.map(x=>`<tr><td>${esc(x.kode)}</td><td>${esc(x.nama)}</td><td>${rup(x.target)}</td><td>${rup(x.real)}</td><td>${pct(x.dev)}</td><td>${status(x.status)}</td></tr>`))}
-function realisasiView(){const d=state.cache.realisasi||{},rows=d.realisasi||[];return tablePage('Rencana & Realisasi','Kontrol pencairan dan realisasi belanja.',['Tanggal','Kode','Jenis','Rencana','Aktual','Selisih','Status'],rows.map(x=>`<tr><td>${esc(x.tanggal)}</td><td>${esc(x.kode)}</td><td>${esc(x.jenis)}</td><td>${rup(x.rencana)}</td><td>${rup(x.aktual)}</td><td>${rup((Number(x.rencana)||0)-(Number(x.aktual)||0))}</td><td>${status(x.status)}</td></tr>`))}
-function monitoringView(){const d=state.cache.monitoring||{},rows=d.monitoring||[];return tablePage('Monitoring Mingguan','Catatan progres mingguan, kendala dan PIC.',['Periode','Kode','Target','Realisasi','Deviasi','Kendala','PIC'],rows.map(x=>`<tr><td>${esc(x.periode)}</td><td>${esc(x.kode)}</td><td>${pct(x.target)}</td><td>${pct(x.real)}</td><td>${pct((Number(x.real)||0)-(Number(x.target)||0))}</td><td>${esc(x.kendala||'-')}</td><td>${esc(x.pic||'-')}</td></tr>`),'Belum ada monitoring mingguan.','MONITORING')}
-function hambatanView(){const d=state.cache.hambatan||{},rows=d.hambatan||[];return tablePage('Hambatan & Root Cause','Masalah, akar penyebab, dampak dan status pengendalian.',['Kode','Masalah','Root Cause','Dampak','Level','Status'],rows.map(x=>`<tr><td>${esc(x.kode)}</td><td>${esc(x.masalah)}</td><td>${esc(x.root)}</td><td>${esc(x.dampak)}</td><td>${esc(x.level)}</td><td>${status(x.status)}</td></tr>`),'Belum ada hambatan.','HAMBATAN')}
-function actionView(){const d=state.cache.action||{},rows=d.action||[];return tablePage('Corrective Action','Tindakan korektif, PIC, deadline dan status penyelesaian.',['Kode','Temuan','Tindakan','PIC','Deadline','Status'],rows.map(x=>`<tr><td>${esc(x.kode)}</td><td>${esc(x.temuan)}</td><td>${esc(x.tindakan)}</td><td>${esc(x.pic)}</td><td>${esc(x.deadline)}</td><td>${status(x.status)}</td></tr>`),'Belum ada corrective action.','ACTION')}
-function riskView(){const d=state.cache.risk||{},rows=d.risk||[];return tablePage('Risk Register','Risiko, penyebab, dampak, mitigasi, PIC dan status.',['Kode','Risiko','Penyebab','Prob.','Dampak','Level','Mitigasi','Status'],rows.map(x=>`<tr><td>${esc(x.kode)}</td><td>${esc(x.risiko)}</td><td>${esc(x.penyebab)}</td><td>${esc(x.prob)}</td><td>${esc(x.dampak)}</td><td>${status(x.level)}</td><td>${esc(x.mitigasi)}</td><td>${status(x.status)}</td></tr>`),'Belum ada risk register.','RISIKO')}
-function masterView(){const d=state.cache.master||{},s=d.summary||{},a=d.activities||[];return `<div class="page-title"><div><h2>Master Data</h2><p>Master kegiatan dan anggaran sebagai sumber perhitungan sistem.</p></div><button class="secondary" onclick="refresh()">↻ Perbarui</button></div><section class="panel"><div class="notice">Total pagu master: <b>${rup(s.pagu)}</b>.</div>${activityTable(a)}</section>`}
-function reportView(){const d=state.cache.report||state.data||{},s=d.summary||{},att=d.attention||[],a=d.activities||[];return `<div class="page-title"><div><h2>Laporan Pengendalian</h2><p>Laporan ringkas untuk pimpinan dan siap dicetak.</p></div><button class="primary" onclick="window.print()">Cetak / PDF</button></div><section class="panel"><div class="report-head"><h1>LAPORAN PENGENDALIAN ANGGARAN BELANJA TAMBAHAN (ABT) 2026</h1><p>Deputi Bidang Pencegahan · Badan Narkotika Nasional Republik Indonesia</p></div><div class="report-grid"><div class="report-box"><span>Total Pagu</span><b>${rup(s.pagu)}</b></div><div class="report-box"><span>Pencairan Aktual</span><b>${rup(s.cair)}</b></div><div class="report-box"><span>Realisasi Belanja</span><b>${rup(s.belanja)}</b></div><div class="report-box"><span>Capaian Fisik</span><b>${pct(s.fisik)}</b></div></div><h3 style="margin-top:22px">1. Ringkasan Kondisi</h3><p style="font-size:12px;line-height:1.7">Pagu ABT tercatat <b>${rup(s.pagu)}</b>, pencairan aktual <b>${rup(s.cair)}</b>, realisasi belanja <b>${rup(s.belanja)}</b>, capaian fisik <b>${pct(s.fisik)}</b>, dan capaian output <b>${pct(s.outputPct)}</b>. Angka mengikuti data yang tersimpan pada sistem.</p><h3>2. Kegiatan yang Memerlukan Perhatian</h3>${att.length?att.map(x=>`<div class="notice"><b>${esc(x.kode)}</b> — ${esc(x.problem)}. ${esc(x.impact)} ${status(x.status)}</div>`).join(''):'<p class="empty">Belum ada kegiatan yang memerlukan perhatian berdasarkan data terisi.</p>'}<h3>3. Analisis Pengendalian</h3><p style="font-size:12px;line-height:1.7">Analisis membaca kesesuaian pagu, kebutuhan dana, rencana pencairan, pencairan aktual, realisasi belanja, progres fisik dan output. Hambatan, root cause dan corrective action menjadi dasar tindak lanjut.</p><h3>4. Tindak Lanjut</h3><p style="font-size:12px;line-height:1.7">Kegiatan yang menunjukkan deviasi ditindaklanjuti melalui monitoring, PIC, batas waktu, dokumentasi dan verifikasi penyelesaian.</p><h3>5. Lampiran Kegiatan</h3>${activityTable(a)}</section>`}
-function docsView(){const d=state.cache.docs||{},rows=d.documents||[];return tablePage('Dokumentasi','Dokumen pendukung, bukti verifikasi dan arsip pengendalian.',['Kode','Jenis Dokumen','Nomor','Tanggal','Verifikasi','Catatan'],rows.map(x=>`<tr><td>${esc(x.kode)}</td><td>${esc(x.jenis)}</td><td>${esc(x.nomor)}</td><td>${esc(x.tanggal)}</td><td>${status(x.verifikasi)}</td><td>${esc(x.catatan)}</td></tr>`),'Belum ada dokumen pendukung.','DOKUMEN')}
+function kendaliView(){
+  const a=picAnalysis();
+  const rows=a.latest.map(x=>`<tr><td>${esc(x.subkegiatan_id||x.id_kegiatan||x.kode||'-')}</td><td><b>${esc(x.nama_kegiatan||x.kegiatan||'-')}</b></td><td>${esc(x.pic||'-')}</td><td>${rup(x.target_anggaran_nominal)}</td><td>${rup(x.realisasi_anggaran_nominal)}</td><td>${pct(x.deviasi_persen)}</td><td>${status(picStatus(x))}</td></tr>`);
+  return tablePage('Kartu Kendali','Satu baris terakhir untuk setiap subkegiatan. Histori mingguan tetap tersimpan sebagai riwayat laporan.',['ID Sub Kegiatan','Sub Kegiatan','PIC','Target Anggaran','Realisasi','Deviasi','Status'],rows,'Belum ada laporan PIC.');
+}
+function realisasiView(){
+  const a=picAnalysis(),rows=a.weeklyRows.flatMap(w=>{
+    return a.rows.filter(x=>String(x.periode||'')===String(w.periode)).map(x=>`<tr><td>${esc(x.periode||'-')}</td><td>${esc(x.subkegiatan_id||x.id_kegiatan||'-')}</td><td>${esc(x.nama_kegiatan||x.kegiatan||'-')}</td><td>${rup(x.target_anggaran_nominal)}</td><td>${rup(x.realisasi_anggaran_nominal)}</td><td>${rup(num(x.target_anggaran_nominal)-num(x.realisasi_anggaran_nominal))}</td><td>${status(picStatus(x))}</td></tr>`);
+  });
+  return tablePage('Rencana & Realisasi','Perbandingan target dan realisasi anggaran berdasarkan laporan mingguan PIC.',['Pekan','ID Sub Kegiatan','Sub Kegiatan','Target','Realisasi','Selisih','Status'],rows,'Belum ada laporan PIC.');
+}
+function monitoringView(){
+  const a=picAnalysis(),rows=a.rows.slice().sort((x,y)=>(periodRank(y.periode)-periodRank(x.periode))||String(y.timestamp||'').localeCompare(String(x.timestamp||''))).map(x=>`<tr><td>${esc(x.periode||'-')}</td><td>${esc(x.subkegiatan_id||x.id_kegiatan||'-')}</td><td>${esc(x.nama_kegiatan||x.kegiatan||'-')}</td><td>${num(x.target_output_jumlah)}</td><td>${num(x.realisasi_output_jumlah)}</td><td>${pct(x.target_output_jumlah?safePct(x.realisasi_output_jumlah,x.target_output_jumlah):0)}</td><td>${esc(x.kendala_utama||'-')}</td><td>${esc(x.pic||'-')}</td></tr>`);
+  return tablePage('Monitoring Mingguan','Histori laporan PIC per pekan. Data tidak ditimpa; setiap pekan menjadi histori subkegiatan.',['Pekan','ID Sub Kegiatan','Sub Kegiatan','Target Output','Realisasi Output','Capaian','Kendala','PIC'],rows,'Belum ada monitoring mingguan dari PIC.');
+}
+function hambatanView(){
+  const a=picAnalysis(),rows=a.hambatan.map(x=>`<tr><td>${esc(x.periode)}</td><td>${esc(x.kode)}</td><td>${esc(x.subKegiatan)}</td><td>${esc(x.masalah)}</td><td>${esc(x.root)}</td><td>${esc(x.dampak)}</td><td>${status(x.level)}</td><td>${esc(x.pic)}</td></tr>`);
+  return tablePage('Hambatan & Root Cause','Hambatan diambil dari kolom Kendala Utama PIC dan dianalisis secara otomatis.',['Pekan','ID Sub Kegiatan','Sub Kegiatan','Kendala','Root Cause Awal','Dampak','Level','PIC'],rows,'Belum ada kendala yang dilaporkan PIC.');
+}
+function actionView(){
+  const a=picAnalysis(),rows=a.actions.map(x=>`<tr><td>${esc(x.kode)}</td><td>${esc(x.subKegiatan)}</td><td>${esc(x.temuan)}</td><td>${esc(x.tindakan)}</td><td>${esc(x.pic)}</td><td>${esc(x.deadline)}</td><td>${status(x.status)}</td></tr>`);
+  return tablePage('Corrective Action','Tindakan pengendali yang dihasilkan mesin berdasarkan status, deviasi, output dan kendala PIC.',['ID Sub Kegiatan','Sub Kegiatan','Temuan','Tindakan Pengendali','PIC','Target Tindak Lanjut','Status'],rows,'Belum ada tindakan korektif yang diperlukan.');
+}
+function riskView(){
+  const a=picAnalysis(),rows=a.risks.map(x=>`<tr><td>${esc(x.kode)}</td><td>${esc(x.risiko)}</td><td>${esc(x.penyebab)}</td><td>${esc(x.prob)}</td><td>${esc(x.dampak)}</td><td>${status(x.level)}</td><td>${esc(x.mitigasi)}</td><td>${esc(x.pic)}</td></tr>`);
+  return tablePage('Risk Register','Risiko operasional yang diturunkan dari status dan kendala laporan PIC.',['ID Sub Kegiatan','Risiko','Penyebab','Probabilitas','Dampak','Level','Mitigasi','PIC'],rows,'Belum ada risiko yang teridentifikasi.');
+}
+function activityTable(rows){return `<div class="table-wrap"><table class="data-table"><thead><tr><th>Kode</th><th>Nama Kegiatan</th><th>Pagu</th><th>Realisasi</th><th>Fisik</th><th>PIC</th><th>Status</th></tr></thead><tbody>${rows.length?rows.map(x=>`<tr><td><b>${esc(x.kode||x.id_kegiatan)}</b></td><td>${esc(x.nama||x.nama_kegiatan)}</td><td>${rup(x.pagu)}</td><td>${rup(x.real)}</td><td>${pct(x.fisik)}</td><td>${esc(x.pic||'-')}</td><td>${status(x.status)}</td></tr>`).join(''):'<tr><td colspan="7" class="empty">Belum ada data kegiatan.</td></tr>'}</tbody></table></div>`}
+function masterView(){
+  const d=state.cache.master||{},s=d.summary||{},a=d.activities||state.data.picActivities||[];
+  return `<div class="page-title"><div><h2>Master Data</h2><p>Master kegiatan dan anggaran tetap membaca Spreadsheet Kendali.</p></div><button class="secondary" onclick="refresh()">↻ Perbarui</button></div><section class="panel"><div class="notice">Total pagu master: <b>${rup(s.pagu)}</b>.</div>${activityTable(a)}</section>`;
+}
+function reportView(){
+  const d=state.cache.report||state.cache.dashboard||state.data||{},s=d.summary||{},a=picAnalysis(),att=a.recommendations.filter(x=>x.level!=='TERKENDALI');
+  return `<div class="page-title"><div><h2>Laporan Pengendalian</h2><p>Ringkasan analisis pelaksanaan ABT 2026 untuk pimpinan.</p></div><button class="primary" onclick="window.print()">Cetak / PDF</button></div>
+  <section class="panel"><div class="report-head"><h1>LAPORAN PENGENDALIAN ANGGARAN BELANJA TAMBAHAN (ABT) 2026</h1><p>Deputi Bidang Pencegahan · Badan Narkotika Nasional Republik Indonesia</p></div>
+  <div class="report-grid"><div class="report-box"><span>Total Pagu Kendali</span><b>${rup(s.pagu)}</b></div><div class="report-box"><span>Realisasi Belanja Kendali</span><b>${rup(s.belanja)}</b></div><div class="report-box"><span>Target Anggaran PIC</span><b>${rup(a.totals.target)}</b></div><div class="report-box"><span>Realisasi Anggaran PIC</span><b>${rup(a.totals.real)}</b></div><div class="report-box"><span>Capaian Output PIC</span><b>${pct(a.totals.outputTarget?safePct(a.totals.outputReal,a.totals.outputTarget):0)}</b></div><div class="report-box"><span>Merah</span><b>${a.statusCount.MERAH}</b></div></div>
+  <h3 style="margin-top:22px">1. Ringkasan Kondisi</h3><p style="font-size:12px;line-height:1.7">Dashboard menggunakan data kendali sebagai baseline keuangan. Laporan pelaksanaan dan status pengendalian menggunakan laporan terbaru dari PIC. Periode grafik dan analisis dimulai September 2026 karena ABT mulai berjalan pada September.</p>
+  <h3>2. Kondisi Per Subkegiatan</h3><div class="table-wrap"><table class="data-table"><thead><tr><th>Pekan</th><th>Sub Kegiatan</th><th>PIC</th><th>Target</th><th>Realisasi</th><th>Output</th><th>Status</th></tr></thead><tbody>${analysisTableRows(a)||'<tr><td colspan="7" class="empty">Belum ada data.</td></tr>'}</tbody></table></div>
+  <h3 style="margin-top:22px">3. Kegiatan yang Memerlukan Perhatian</h3>${att.length?att.map(x=>`<div class="notice"><b>${x.level==='KRITIS'?'🔴':'🟡'} ${esc(x.subKegiatan)}</b> — ${esc(x.rekomendasi)}</div>`).join(''):'<p class="empty">Belum ada kegiatan yang memerlukan perhatian.</p>'}
+  <h3>4. Rekomendasi Pengendalian</h3><p style="font-size:12px;line-height:1.7">${att.length?'Prioritaskan subkegiatan dengan status MERAH, kemudian KUNING. Minta PIC memastikan tindak lanjut pada periode berikutnya dan lakukan verifikasi atas perubahan realisasi dan output.':'Lanjutkan monitoring mingguan dan verifikasi data pelaksanaan.'}</p>
+  </section>`;
+}
+function docsView(){
+  const d=state.cache.docs||{},rows=d.documents||[];
+  const a=picAnalysis();
+  const picDocs=a.latest.map(x=>`<tr><td>${esc(x.subkegiatan_id||x.id_kegiatan||'-')}</td><td>Laporan Pelaksanaan</td><td>${esc(x.id_input||'-')}</td><td>${esc(x.periode||'-')}</td><td>${status('DITERIMA DARI PIC')}</td><td>Laporan diterima dari PIC dan menjadi dasar pengolahan pengendalian.</td></tr>`);
+  const existing=rows.map(x=>`<tr><td>${esc(x.kode)}</td><td>${esc(x.jenis)}</td><td>${esc(x.nomor)}</td><td>${esc(x.tanggal)}</td><td>${status(x.verifikasi)}</td><td>${esc(x.catatan)}</td></tr>`);
+  return `<div class="page-title"><div><h2>Dokumentasi</h2><p>Jejak laporan pelaksanaan dan dokumen pendukung pengendalian.</p></div><div class="toolbar"><button class="secondary" onclick="refresh()">↻ Perbarui</button></div></div>
+  <section class="panel"><div class="panel-head"><h3>Jejak Laporan Pelaksanaan</h3><span class="muted">${a.latest.length} laporan terbaru</span></div><div class="table-wrap"><table class="data-table"><thead><tr><th>ID Sub Kegiatan</th><th>Jenis</th><th>ID Input</th><th>Pekan</th><th>Status</th><th>Keterangan</th></tr></thead><tbody>${picDocs||'<tr><td colspan="6" class="empty">Belum ada laporan PIC.</td></tr>'}</tbody></table></div></section>
+  <section class="panel"><div class="panel-head"><h3>Dokumen Pendukung</h3></div><div class="table-wrap"><table class="data-table"><thead><tr><th>Kode</th><th>Jenis Dokumen</th><th>Nomor</th><th>Tanggal</th><th>Verifikasi</th><th>Catatan</th></tr></thead><tbody>${existing||'<tr><td colspan="6" class="empty">Belum ada dokumen pendukung pada Spreadsheet Kendali.</td></tr>'}</tbody></table></div></section>`;
+}
 function openGeneric(key){
  const acts=(state.data.activities||state.cache.master?.activities||state.cache.inbox?.activities||[]);
  const labels={MONITORING:['Monitoring Mingguan',['Periode','Tanggal Monitoring','Target Fisik Kumulatif','Realisasi Fisik Kumulatif','Target Output','Realisasi Output','Kendala','Tindak Lanjut','PIC','Deadline']],HAMBATAN:['Hambatan & Root Cause',['Tanggal','Kategori','Masalah','Root Cause','Dampak','Tingkat Dampak','Status']],ACTION:['Corrective Action',['Temuan','Tindakan','PIC','Tanggal Mulai','Deadline','Status','Bukti','Catatan']],RISIKO:['Risk Register',['Risiko','Penyebab','Probabilitas','Dampak','Level Risiko','Mitigasi','PIC','Deadline','Status']],DOKUMEN:['Dokumentasi',['Jenis Dokumen','Nomor Dokumen','Tanggal Dokumen','File URL','Status Verifikasi','Catatan']]}[key];
@@ -168,10 +343,10 @@ function closeGeneric(){$('#genericModal')?.remove()}
 
 function editPIC(id){const d=state.cache.inbox||{},r=(d.picInbox||[]).find(x=>String(x.id_input)===String(id));if(!r)return;const acts=state.data.activities||d.activities||[];const ov=document.createElement('div');ov.className='modal';ov.id='editPicModal';ov.style.cssText='align-items:flex-start;justify-content:center;padding:12px 12px 24px;overflow-y:auto;';ov.innerHTML=`<div class="modal-card" style="width:min(760px,96vw);max-height:calc(100vh - 24px);overflow-y:auto;margin:0 auto;"><div class="modal-head"><div><h3>Edit Data PIC</h3><p class="muted">Perubahan langsung diproses sebagai data pengendalian.</p></div><button class="icon-btn" onclick="closeEdit()">×</button></div><div class="form-grid"><div class="field"><label>Periode<select id="ePeriode"><option>September 2026</option><option>Oktober 2026</option><option>Nopember 2026</option><option>Desember 2026</option></select></label></div><div class="field"><label>Direktorat<input id="eDir"></label></div><div class="field full"><label>Kegiatan<select id="eKegiatan">${acts.map(x=>`<option value="${esc(x.id_kegiatan)}">${esc(x.id_kegiatan)} — ${esc(x.nama_kegiatan||x.nama)}</option>`).join('')}</select></label></div><div class="field"><label>Nama PIC<input id="ePIC"></label></div><div class="field"><label>Deadline<input id="eDeadline" type="date"></label></div><div class="field"><label>Target Anggaran<input id="eTarget" inputmode="numeric"></label></div><div class="field"><label>Realisasi Anggaran<input id="eReal" inputmode="numeric"></label></div><div class="field"><label>Target Output<input id="eTO" type="number"></label></div><div class="field"><label>Realisasi Output<input id="eRO" type="number"></label></div><div class="field full"><label>Kendala<textarea id="eKendala"></textarea></label></div><div class="field full"><label>Tindak Lanjut<textarea id="eTindak"></textarea></label></div><div class="field full"><label>Catatan<input id="eCatatan"></label></div></div><div class="form-actions" style="position:sticky;bottom:0;background:#fff;padding-top:12px;padding-bottom:4px;z-index:3;"><button class="secondary" onclick="closeEdit()">Batal</button><button class="primary" id="eSave">Simpan Perubahan</button></div><div id="eMsg" class="msg"></div></div>`;document.body.appendChild(ov);$('#ePeriode').value=r.periode||'September 2026';$('#eDir').value=r.direktorat||'';$('#eKegiatan').value=r.id_kegiatan||'';$('#ePIC').value=r.pic||'';$('#eDeadline').value=r.deadline||'';$('#eTarget').value=r.target_anggaran_nominal||0;$('#eReal').value=r.realisasi_anggaran_nominal||0;$('#eTO').value=r.target_output_jumlah||0;$('#eRO').value=r.realisasi_output_jumlah||0;$('#eKendala').value=r.kendala_utama||'';$('#eTindak').value=r.tindak_lanjut||'';$('#eCatatan').value=r.catatan_pembaku||'';$('#eSave').onclick=async()=>{const b=$('#eSave');b.disabled=true;b.textContent='Menyimpan…';const p={code:state.code,id_input:r.id_input,payload:{periode:$('#ePeriode').value,direktorat:$('#eDir').value,id_kegiatan:$('#eKegiatan').value,pic:$('#ePIC').value.trim(),deadline:$('#eDeadline').value,target_anggaran_nominal:num($('#eTarget').value),realisasi_anggaran_nominal:num($('#eReal').value),target_output_jumlah:num($('#eTO').value),realisasi_output_jumlah:num($('#eRO').value),kendala_utama:$('#eKendala').value,tindak_lanjut:$('#eTindak').value,catatan_pembaku:$('#eCatatan').value}};const z=await api('updatePICInput',p);if(z.ok){closeEdit();state.cache.inbox=null;await loadModule('inbox')}else $('#eMsg').textContent=z.message||'Perubahan belum berhasil disimpan.';b.disabled=false;b.textContent='Simpan Perubahan'}}
 function closeEdit(){$('#editPicModal')?.remove()}
-async function confirmPIC(id){if(!confirm('Konfirmasi data PIC ini telah diperiksa?'))return;const r=await api('confirmPICInput',{id_input:id,code:state.code});if(r.ok){state.cache.inbox=null;await loadModule('inbox')}else alert(r.message||'Data belum dapat dikonfirmasi.')}
-async function deletePIC(id){if(!confirm('Hapus data PIC ini?'))return;const r=await api('deletePICInput',{id_input:id,code:state.code});if(r.ok){state.cache.inbox=null;await loadModule('inbox')}else alert(r.message||'Data belum berhasil dihapus.')}
+async function confirmPIC(id){if(!confirm('Konfirmasi data pelaksanaan ini telah diperiksa?'))return;const r=await api('confirmPICInput',{id_input:id,code:state.code});if(r.ok){state.cache.inbox=null;await loadModule('inbox')}else alert(r.message||'Data belum dapat dikonfirmasi.')}
+async function deletePIC(id){if(!confirm('Hapus data pelaksanaan ini?'))return;const r=await api('deletePICInput',{id_input:id,code:state.code});if(r.ok){state.cache.inbox=null;await loadModule('inbox')}else alert(r.message||'Data belum berhasil dihapus.')}
 function logout(){try{sessionStorage.removeItem('abt_access')}catch(e){};state.role='';state.code='';state.access=false;state.data={};state.cache={};state.view='pic';$('#modal').classList.remove('hidden');document.body.classList.add('locked');$('#accessMsg').textContent='';$('#accessCode').value='';$('#roleLabel').textContent='Pengguna';$('#roleSub').textContent='Belum masuk';drawNav()}
-$('#doAccess').onclick=access;$('#accessBtn').onclick=()=>$('#modal').classList.remove('hidden');$('#logoutBtn').onclick=logout;document.querySelectorAll('.role-card').forEach(b=>b.onclick=()=>{document.querySelectorAll('.role-card').forEach(x=>x.classList.remove('selected'));b.classList.add('selected');state.selectedRole=b.dataset.role;$('#accessMsg').textContent=''});$('#accessCode').addEventListener('keydown',e=>{if(e.key==='Enter')access()});document.addEventListener('change',e=>{if(e.target.id==='pRO')filterPICActivities();if(e.target.id==='pKegiatan')loadPICContext();if(e.target.id==='pPeriode'&&$('#pKegiatan')?.value)loadPICContext()});document.addEventListener('click',e=>{if(e.target.id==='savePicBtn')savePIC()});
+$('#doAccess').onclick=access;$('#accessBtn').onclick=()=>$('#modal').classList.remove('hidden');$('#logoutBtn').onclick=logout;document.querySelectorAll('.role-card').forEach(b=>b.onclick=()=>{document.querySelectorAll('.role-card').forEach(x=>x.classList.remove('selected'));b.classList.add('selected');state.selectedRole=b.dataset.role;$('#accessMsg').textContent=''});$('#accessCode').addEventListener('keydown',e=>{if(e.key==='Enter')access()});document.addEventListener('change',e=>{if(e.target.id==='pKegiatan')loadPICContext();if(e.target.id==='pPeriode'&&$('#pKegiatan')?.value)loadPICContext()});document.addEventListener('click',e=>{if(e.target.id==='savePicBtn')savePIC()});
 function tick(){$('#clock').textContent=new Intl.DateTimeFormat('id-ID',{dateStyle:'full',timeStyle:'short'}).format(new Date())+' WIB'}setInterval(tick,1000);tick();try{const saved=JSON.parse(sessionStorage.getItem('abt_access')||'null');if(saved&&saved.role&&saved.code){state.selectedRole=saved.role;state.role=saved.role;state.code=saved.code;state.access=true;state.view=saved.role==='PIC'?'pic':saved.role==='PIMPINAN'?'report':'dashboard';document.body.classList.remove('locked');$('#modal').classList.add('hidden');$('#roleLabel').textContent=saved.role==='PENGENDALI'?'Tim Pengendali':saved.role==='PIMPINAN'?'Pimpinan / Laporan':'PIC Kegiatan';$('#roleSub').textContent='Akses aktif';drawNav();initialLoad();}else{$('#modal').classList.remove('hidden');drawNav();render();}}catch(e){$('#modal').classList.remove('hidden');drawNav();render();}
 window.showView=showView;window.refresh=refresh;window.confirmPIC=confirmPIC;window.deletePIC=deletePIC;window.editPIC=editPIC;window.closeEdit=closeEdit;window.openGeneric=openGeneric;window.closeGeneric=closeGeneric;
 })();
