@@ -107,36 +107,86 @@ function dashboard(){
  </div>
  <section class="panel"><div class="panel-head"><h3>Subkegiatan Terbaru</h3><button class="secondary" onclick="showView('inbox')">Buka Data Masuk PIC</button></div><div class="table-wrap"><table class="data-table"><thead><tr><th>Sub Kegiatan</th><th>PIC</th><th>Pekan</th><th>Target</th><th>Realisasi</th><th>Output</th><th>Status</th></tr></thead><tbody>${subs.slice(0,15).map(x=>`<tr><td><b>${esc(x.subKegiatan)}</b></td><td>${esc(x.pic)}</td><td>${esc(x.pekan)}</td><td>${rup(x.target)}</td><td>${rup(x.real)}</td><td>${Number(x.outputReal||0).toLocaleString('id-ID')} / ${Number(x.outputTarget||0).toLocaleString('id-ID')}</td><td>${status(x.status)}</td></tr>`).join('')||'<tr><td colspan="7" class="empty">Belum ada data PIC.</td></tr>'}</tbody></table></div></section>`}
 
-function picView(){
- const acts=state.data.activities||[],dd=state.data.dropdown||{};
- const opts=(arr,placeholder)=>`<option value="">${placeholder}</option>${(arr||[]).map(x=>`<option value="${esc(x)}">${esc(x)}</option>`).join('')}`;
- return `<div class="page-title"><div><h2>Input Data PIC</h2><p>Isi laporan pelaksanaan. Pilihan Direktorat, RO dan Komponen mengikuti daftar yang tersedia.</p></div></div>
- <section class="panel"><div class="hint-card"><b>Identitas sub kegiatan</b><br>Pilih kegiatan yang sama pada setiap pekan agar perkembangan dapat dibaca sebagai satu rangkaian progress.</div>
- <div class="form-grid">
- <div class="field"><label>Pekan Laporan<select id="pPeriode"><option>September 2026</option><option>Oktober 2026</option><option>Nopember 2026</option><option>Desember 2026</option></select></label></div>
- <div class="field"><label>Direktorat<select id="pDir">${opts(dd.direktorat,'Pilih Direktorat')}</select></label></div>
- <div class="field"><label>RO<select id="pRO">${opts(dd.ro,'Pilih RO')}</select></label></div>
- <div class="field"><label>Komponen<select id="pKomponen">${opts(dd.komponen,'Pilih Komponen')}</select></label></div>
- <div class="field"><label>Nama PIC<input id="pPIC" placeholder="Nama personel PIC"></label></div>
- <div class="field"><label>Deadline Kegiatan<input id="pDeadline" type="date"></label></div>
- <div class="field full"><label>Pilih Sub Kegiatan<select id="pKegiatan"><option value="">Pilih sub kegiatan</option>${acts.map(x=>`<option value="${esc(x.id_kegiatan)}" data-ro="${esc(x.kode_ro||'')}" data-komponen="${esc(x.kode_komponen||'')}">${esc(x.kode||x.id_kegiatan)} — ${esc(x.nama_kegiatan)}</option>`).join('')}</select></label><span class="help">Sub kegiatan menjadi identitas progress antarpekan.</span></div>
- </div><div id="picContext" class="activity-context hidden"></div><div id="picFields" class="hidden"><div class="section-title"><h3 style="margin:18px 0 8px">Kondisi Periode Berjalan</h3></div><div class="form-grid">
- <div class="field"><label>Target Anggaran (Rp)<input id="pTargetA" inputmode="numeric" placeholder="0"></label></div>
- <div class="field"><label>Realisasi Anggaran (Rp)<input id="pRealA" inputmode="numeric" placeholder="0"></label></div>
- <div class="field"><label>Target Output<input id="pTargetO" type="number" min="0" placeholder="0"></label></div>
- <div class="field"><label>Realisasi Output<input id="pRealO" type="number" min="0" placeholder="0"></label></div>
- <div class="field full"><label>Kendala Utama<textarea id="pKendala" placeholder="Tuliskan kendala bila ada."></textarea></label></div>
- <div class="field full"><label>Tindak Lanjut<textarea id="pTindak" placeholder="Tuliskan tindak lanjut yang dilakukan/direncanakan."></textarea></label></div>
- <div class="field full"><label>Catatan Perwabku<input id="pCatatan" placeholder="Catatan tambahan"></label></div></div>
- <div class="form-actions"><button class="primary" id="savePicBtn">Simpan Data PIC</button></div><div id="picMsg" class="msg"></div></div></section>`}
-async function loadPICContext(){const id=$('#pKegiatan').value;if(!id){$('#picContext').classList.add('hidden');$('#picFields').classList.add('hidden');return}const req=++state.picRequest;const a=(state.data.activities||[]).find(x=>String(x.id_kegiatan)===String(id))||{};$('#picContext').classList.remove('hidden');$('#picFields').classList.add('hidden');$('#picContext').innerHTML=`<section class="panel"><div class="context-head"><div><div class="context-code">${esc(a.id_kegiatan||id)}</div><div class="context-name">${esc(a.nama_kegiatan||'Nama kegiatan')}</div></div></div><div class="context-grid"><div class="context-box"><small>Tujuan</small><b>${esc(a.tujuan||'—')}</b></div><div class="context-box"><small>Sasaran</small><b>${esc(a.sasaran||'—')}</b></div><div class="context-box"><small>Output</small><b>${esc(a.output||'—')}</b></div><div class="context-box"><small>Target Master</small><b>${esc(a.target_volume||'—')} ${esc(a.satuan||'')}</b></div><div class="context-box"><small>Pagu Kegiatan</small><b>${rup(a.pagu)}</b></div></div></section>`;try{const r=await api('getPICContext',{id_kegiatan:id,periode:$('#pPeriode').value});if(req!==state.picRequest||$('#pKegiatan').value!==id)return;if(!r.ok)throw new Error(r.message);const f=r.finance||{},m=r.master||{},l=r.latest||{};$('#picContext').innerHTML=`<section class="panel"><div class="context-head"><div><div class="context-code">${esc(m.id_kegiatan||id)}</div><div class="context-name">${esc(m.nama_kegiatan||'Nama kegiatan')}</div></div></div><div class="context-grid"><div class="context-box"><small>Tujuan</small><b>${esc(m.tujuan||'—')}</b></div><div class="context-box"><small>Sasaran</small><b>${esc(m.sasaran||'—')}</b></div><div class="context-box"><small>Output</small><b>${esc(m.output||'—')}</b></div><div class="context-box"><small>Target Master</small><b>${esc(m.target_volume||'—')} ${esc(m.satuan||'')}</b></div><div class="context-box"><small>Pagu Kegiatan</small><b>${rup(f.pagu)}</b></div><div class="context-box"><small>Realisasi Sebelumnya</small><b>${rup(f.belanja)}</b></div><div class="context-box"><small>Sisa Pagu</small><b>${rup(f.sisa)}</b></div><div class="context-box"><small>Rencana Pencairan</small><b>${rup(f.rencana)}</b></div><div class="context-box"><small>Pencairan Aktual</small><b>${rup(f.cair)}</b></div><div class="context-box"><small>Realisasi PIC Terakhir</small><b>${l.realisasi_output_jumlah??'—'}</b></div></div></section>`;$('#picFields').classList.remove('hidden')}catch(e){if(req!==state.picRequest||$('#pKegiatan').value!==id)return;$('#picContext').innerHTML=`<section class="panel error-panel"><h3>Data kegiatan belum dapat dibaca</h3><p>${esc(e.message)}</p><button class="secondary" onclick="loadPICContext()">↻ Coba lagi</button></section>`}}
-function filterPICActivities(){
- const ro=$('#pRO')?.value||'', sel=$('#pKegiatan'); if(!sel)return;
- const m=ro.match(/\.([A-Z]+)\.(\d+)\s*-?/); const code=m?(m[1]+m[2]):'';
- Array.from(sel.options).forEach((o,i)=>{if(i===0){o.hidden=false;return}const rc=o.dataset.ro||'';o.hidden=!!code&&rc!==code;});
- if(sel.value&&sel.selectedOptions[0]?.hidden)sel.value='';
+function picOptions_(){return state.data.picOptions||{direktorat:[],subKegiatan:[]}}
+function unique_(a){return [...new Set((a||[]).filter(x=>String(x??'').trim()!==''))]}
+function fillSelect_(el,items,placeholder){if(!el)return;el.innerHTML=`<option value="">${esc(placeholder)}</option>`+(items||[]).map(x=>`<option value="${esc(x)}">${esc(x)}</option>`).join('')}
+function resetPICBelow_(level){const ids=['pRO','pKomponen','pSubKegiatan'];const idx=ids.indexOf(level);if(idx<0)return;ids.slice(idx).forEach((id,i)=>{const ph=id==='pRO'?'Pilih RO':id==='pKomponen'?'Pilih Komponen':'Pilih Sub Kegiatan';fillSelect_($('#'+id),[],ph)});$('#picContext').classList.add('hidden');$('#picFields').classList.add('hidden')}
+function populatePICDropdowns(){
+ const o=picOptions_(),rows=o.subKegiatan||[],dir=$('#pDir')?.value||'',ro=$('#pRO')?.value||'',kom=$('#pKomponen')?.value||'';
+ const ros=unique_(rows.filter(x=>!dir||String(x.direktorat)===String(dir)).map(x=>x.ro));
+ const ks=unique_(rows.filter(x=>(!dir||String(x.direktorat)===String(dir))&&(!ro||String(x.ro)===String(ro))).map(x=>x.komponen));
+ const subs=rows.filter(x=>(!dir||String(x.direktorat)===String(dir))&&(!ro||String(x.ro)===String(ro))&&(!kom||String(x.komponen)===String(kom)));
+ fillSelect_($('#pRO'),ros,'Pilih RO');
+ fillSelect_($('#pKomponen'),ks,'Pilih Komponen');
+ if($('#pSubKegiatan'))$('#pSubKegiatan').innerHTML='<option value="">Pilih Sub Kegiatan</option>'+subs.map(x=>`<option value="${esc(x.id_kegiatan)}">${esc(x.nama_sub_kegiatan||x.kegiatan||'-')}</option>`).join('');
 }
-async function savePIC(){const a=state.data.activities||[],sel=a.find(x=>String(x.id_kegiatan)===$('#pKegiatan').value)||{};const p={periode:$('#pPeriode').value,direktorat:$('#pDir').value,ro:$('#pRO').value,komponen:$('#pKomponen').value,id_kegiatan:$('#pKegiatan').value,kegiatan:sel.nama_kegiatan||'',pic:$('#pPIC').value.trim(),deadline:$('#pDeadline').value,target_anggaran_nominal:num($('#pTargetA').value),realisasi_anggaran_nominal:num($('#pRealA').value),target_output_jumlah:num($('#pTargetO').value),realisasi_output_jumlah:num($('#pRealO').value),kendala_utama:$('#pKendala').value.trim(),tindak_lanjut:$('#pTindak').value.trim(),catatan_pembaku:$('#pCatatan').value.trim(),sumber_input:'PIC'};if(!p.direktorat||!p.ro||!p.komponen||!p.id_kegiatan||!p.pic){$('#picMsg').textContent='Direktorat, RO, Komponen, Sub Kegiatan dan Nama PIC wajib diisi.';return}const b=$('#savePicBtn');b.disabled=true;b.textContent='Menyimpan…';$('#picMsg').textContent='';const r=await api('savePICInput',p);b.disabled=false;b.textContent='Simpan Data PIC';$('#picMsg').textContent=r.ok?'Data tersimpan dan langsung diproses ke sistem pengendalian.':(r.message||'Data belum berhasil disimpan.');if(r.ok){$('#pTargetA').value='';$('#pRealA').value='';$('#pTargetO').value='';$('#pRealO').value='';$('#pKendala').value='';$('#pTindak').value='';$('#pCatatan').value='';}}
+
+function picSelected_(){const id=$('#pSubKegiatan')?.value||'';return (picOptions_().subKegiatan||[]).find(x=>String(x.id_kegiatan)===String(id))||null}
+function previewPICStatus(){
+ const t=num($('#pTargetA')?.value),r=num($('#pRealA')?.value),to=num($('#pTargetO')?.value),ro=num($('#pRealO')?.value),p=picSelected_()?.pagu_abt||0;
+ const tp=safePct(t,p),rp=safePct(r,p),dev=rp-tp,op=safePct(ro,to);
+ if($('#pTargetAPct'))$('#pTargetAPct').value=p?tp.toFixed(2)+'%':'—';
+ if($('#pRealAPct'))$('#pRealAPct').value=p?rp.toFixed(2)+'%':'—';
+ if($('#pDeviasi'))$('#pDeviasi').value=p?dev.toFixed(2)+'%':'—';
+ if($('#pRealOPct'))$('#pRealOPct').value=to?op.toFixed(2)+'%':'—';
+ let st='MERAH';if(dev>=-5&&op>=90)st='HIJAU';else if(dev>=-15&&op>=70)st='KUNING';
+ if($('#pStatus'))$('#pStatus').value=(t||r||to||ro)?st:'—';
+}
+function picView(){
+ const o=picOptions_();
+ const dirs=o.direktorat||[];
+ return `<div class="page-title"><div><h2>Input Data PIC</h2><p>Isi perkembangan sub kegiatan. Pilihan mengikuti struktur yang tersedia pada data kegiatan PIC.</p></div></div>
+ <section class="panel">
+  <div class="hint-card"><b>Identitas sub kegiatan</b><br>Pilih Direktorat → RO → Komponen → Sub Kegiatan. Identitas sub kegiatan tetap digunakan agar laporan pekan berikutnya terbaca sebagai satu rangkaian progress.</div>
+  <div class="form-grid">
+   <div class="field"><label>Pekan Laporan<select id="pPeriode"><option>September 2026</option><option>Oktober 2026</option><option>Nopember 2026</option><option>Desember 2026</option></select></label></div>
+   <div class="field"><label>Direktorat<select id="pDir"><option value="">Pilih Direktorat</option>${dirs.map(x=>`<option value="${esc(x)}">${esc(x)}</option>`).join('')}</select></label></div>
+   <div class="field"><label>RO<select id="pRO"><option value="">Pilih RO</option></select></label></div>
+   <div class="field"><label>Komponen<select id="pKomponen"><option value="">Pilih Komponen</option></select></label></div>
+   <div class="field full"><label>Sub Kegiatan<select id="pSubKegiatan"><option value="">Pilih Sub Kegiatan</option></select></label><span class="help">Sub kegiatan berasal dari daftar kegiatan yang tersedia pada sumber data PIC.</span></div>
+   <div class="field"><label>Nama PIC<input id="pPIC" placeholder="Nama personel PIC"></label></div>
+   <div class="field"><label>Deadline / Timeline<input id="pDeadline" type="date"></label></div>
+  </div>
+  <div id="picContext" class="activity-context hidden"></div>
+  <div id="picFields" class="hidden">
+   <div class="section-title"><h3 style="margin:18px 0 8px">Isian Perkembangan</h3></div>
+   <div class="form-grid">
+    <div class="field"><label>Pagu ABT (Rp)<input id="pPagu" readonly></label></div>
+    <div class="field"><label>Target Anggaran Nominal (Rp)<input id="pTargetA" inputmode="numeric" placeholder="0"></label></div>
+    <div class="field"><label>Target Anggaran %<input id="pTargetAPct" readonly value="—"></label></div>
+    <div class="field"><label>Realisasi Anggaran Nominal (Rp)<input id="pRealA" inputmode="numeric" placeholder="0"></label></div>
+    <div class="field"><label>Realisasi Anggaran %<input id="pRealAPct" readonly value="—"></label></div>
+    <div class="field"><label>Deviasi %<input id="pDeviasi" readonly value="—"></label></div>
+    <div class="field"><label>Target Output Jumlah<input id="pTargetO" type="number" min="0" placeholder="0"></label></div>
+    <div class="field"><label>Target Output %<input value="100%" readonly></label></div>
+    <div class="field"><label>Realisasi Output Jumlah<input id="pRealO" type="number" min="0" placeholder="0"></label></div>
+    <div class="field"><label>Realisasi Output %<input id="pRealOPct" readonly value="—"></label></div>
+    <div class="field"><label>Status<input id="pStatus" readonly value="—"></label></div>
+    <div class="field full"><label>Kendala Utama<textarea id="pKendala" placeholder="Tuliskan kendala bila ada."></textarea></label></div>
+    <div class="field full"><label>Tindak Lanjut<textarea id="pTindak" placeholder="Tuliskan tindak lanjut yang dilakukan/direncanakan."></textarea></label></div>
+    <div class="field full"><label>Catatan Perwabku<input id="pCatatan" placeholder="Catatan tambahan"></label></div>
+    <div class="field full"><label>Keterangan<input id="pKeterangan" placeholder="Keterangan bila diperlukan"></label></div>
+   </div>
+   <div class="form-actions"><button class="primary" id="savePicBtn">Simpan Data PIC</button></div><div id="picMsg" class="msg"></div>
+  </div>
+ </section>`
+}
+async function loadPICContext(){
+ const id=$('#pSubKegiatan')?.value||'';if(!id){$('#picContext').classList.add('hidden');$('#picFields').classList.add('hidden');return}
+ const req=++state.picRequest;const a=picSelected_();$('#picContext').classList.remove('hidden');$('#picFields').classList.add('hidden');
+ $('#picContext').innerHTML=`<section class="panel"><div class="context-head"><div><div class="context-code">${esc(a?.ro||'')}</div><div class="context-name">${esc(a?.nama_sub_kegiatan||a?.kegiatan||'Sub Kegiatan')}</div></div></div><div class="context-grid"><div class="context-box"><small>Tujuan</small><b>${esc(a?.tujuan||'—')}</b></div><div class="context-box"><small>Sasaran</small><b>${esc(a?.sasaran||'—')}</b></div><div class="context-box"><small>Komponen</small><b>${esc(a?.komponen||'—')}</b></div><div class="context-box"><small>Pagu ABT</small><b>${rup(a?.pagu_abt)}</b></div></div></section>`;
+ try{const r=await api('getPICContext',{id_kegiatan:id,periode:$('#pPeriode').value});if(req!==state.picRequest||$('#pSubKegiatan').value!==id)return;if(!r.ok)throw new Error(r.message);const m=r.master||{},f=r.finance||{},l=r.latest||{};
+  $('#pPIC').value=l.pic||m.pic||'';$('#pDeadline').value=(l.deadline||m.deadline||'').slice(0,10);$('#pPagu').value=rup(f.pagu);
+  $('#pTargetA').value=l.target_anggaran_nominal??'';$('#pRealA').value=l.realisasi_anggaran_nominal??'';$('#pTargetO').value=l.target_output_jumlah??'';$('#pRealO').value=l.realisasi_output_jumlah??'';$('#pKendala').value=l.kendala_utama||'';$('#pTindak').value=l.tindak_lanjut||'';$('#pCatatan').value=l.catatan_pembaku||'';$('#pKeterangan').value=l.keterangan||'';
+  $('#picFields').classList.remove('hidden');previewPICStatus();
+ }catch(e){if(req!==state.picRequest||$('#pSubKegiatan').value!==id)return;$('#picContext').innerHTML=`<section class="panel error-panel"><h3>Data sub kegiatan belum dapat dibaca</h3><p>${esc(e.message)}</p><button class="secondary" onclick="loadPICContext()">↻ Coba lagi</button></section>`}
+}
+async function savePIC(){
+ const a=picSelected_();const p={periode:$('#pPeriode').value,direktorat:$('#pDir').value,ro:$('#pRO').value,komponen:$('#pKomponen').value,id_kegiatan:$('#pSubKegiatan').value,kegiatan:a?.nama_sub_kegiatan||a?.kegiatan||'',pic:$('#pPIC').value.trim(),deadline:$('#pDeadline').value,target_anggaran_nominal:num($('#pTargetA').value),realisasi_anggaran_nominal:num($('#pRealA').value),target_output_jumlah:num($('#pTargetO').value),realisasi_output_jumlah:num($('#pRealO').value),kendala_utama:$('#pKendala').value.trim(),tindak_lanjut:$('#pTindak').value.trim(),catatan_pembaku:$('#pCatatan').value.trim(),keterangan:$('#pKeterangan').value.trim(),sumber_input:'PIC'};
+ if(!p.id_kegiatan||!p.pic){$('#picMsg').textContent='Sub kegiatan dan Nama PIC wajib diisi.';return}
+ const b=$('#savePicBtn');b.disabled=true;b.textContent='Menyimpan…';$('#picMsg').textContent='';const r=await api('savePICInput',p);b.disabled=false;b.textContent='Simpan Data PIC';$('#picMsg').textContent=r.ok?'Data tersimpan di Spreadsheet PIC dan dapat langsung diolah Pengendali.':(r.message||'Data belum berhasil disimpan.');if(r.ok){state.data=await api('getPICBootstrapData');render();}
+}
+
 function inboxView(){const d=state.cache.inbox||state.data||{},rows=d.picInbox||[];return `<div class="page-title"><div><h2>Data Masuk PIC</h2><p>Data PIC yang tersimpan langsung diproses sebagai data pengendalian.</p></div><div class="toolbar"><button class="secondary" onclick="refresh()">↻ Perbarui</button></div></div><section class="panel"><div class="table-wrap"><table class="data-table"><thead><tr><th>Periode</th><th>Direktorat</th><th>Kegiatan</th><th>PIC</th><th>Pagu</th><th>Target</th><th>Realisasi</th><th>Output</th><th>Status</th><th>Aksi</th></tr></thead><tbody>${rows.length?rows.map(x=>`<tr><td>${esc(x.periode)}</td><td>${esc(x.direktorat)}</td><td><b>${esc(x.id_kegiatan)}</b><br>${esc(x.nama_kegiatan||'')}</td><td>${esc(x.pic||'-')}</td><td>${rup(x.pagu_abt)}</td><td>${rup(x.target_anggaran_nominal)}</td><td>${rup(x.realisasi_anggaran_nominal)}</td><td>${num(x.realisasi_output_jumlah)} / ${num(x.target_output_jumlah)}</td><td>${status(x.status)}</td><td><div class="table-actions"><button class="secondary small-btn" onclick="editPIC('${esc(x.id_input)}')">Edit</button><button class="danger small-btn" onclick="deletePIC('${esc(x.id_input)}')">Hapus</button></div></td></tr>`).join(''):'<tr><td colspan="10" class="empty">Belum ada data PIC.</td></tr>'}</tbody></table></div></section>`}
 function tablePage(title,desc,headers,rows,empty='Belum ada data.',addKey='') {return `<div class="page-title"><div><h2>${title}</h2><p>${desc}</p></div><div class="toolbar"><button class="secondary" onclick="refresh()">↻ Perbarui</button>${addKey?`<button class="primary" onclick="openGeneric('${addKey}')">+ Tambah Data</button>`:''}</div></div><section class="panel"><div class="table-wrap"><table class="data-table"><thead><tr>${headers.map(h=>`<th>${h}</th>`).join('')}</tr></thead><tbody>${rows.length?rows.join(''):`<tr><td colspan="${headers.length}" class="empty">${empty}</td></tr>`}</tbody></table></div></section>`}
 function kendaliView(){const d=state.cache.kendali||{},rows=d.kendali||[];return tablePage('Kartu Kendali','Perbandingan target dan realisasi kegiatan untuk pengendalian.',['Kode','Kegiatan','Target Anggaran','Realisasi','Deviasi','Status'],rows.map(x=>`<tr><td>${esc(x.kode)}</td><td>${esc(x.nama)}</td><td>${rup(x.target)}</td><td>${rup(x.real)}</td><td>${pct(x.dev)}</td><td>${status(x.status)}</td></tr>`))}
@@ -171,7 +221,7 @@ function closeEdit(){$('#editPicModal')?.remove()}
 async function confirmPIC(id){if(!confirm('Konfirmasi data PIC ini telah diperiksa?'))return;const r=await api('confirmPICInput',{id_input:id,code:state.code});if(r.ok){state.cache.inbox=null;await loadModule('inbox')}else alert(r.message||'Data belum dapat dikonfirmasi.')}
 async function deletePIC(id){if(!confirm('Hapus data PIC ini?'))return;const r=await api('deletePICInput',{id_input:id,code:state.code});if(r.ok){state.cache.inbox=null;await loadModule('inbox')}else alert(r.message||'Data belum berhasil dihapus.')}
 function logout(){try{sessionStorage.removeItem('abt_access')}catch(e){};state.role='';state.code='';state.access=false;state.data={};state.cache={};state.view='pic';$('#modal').classList.remove('hidden');document.body.classList.add('locked');$('#accessMsg').textContent='';$('#accessCode').value='';$('#roleLabel').textContent='Pengguna';$('#roleSub').textContent='Belum masuk';drawNav()}
-$('#doAccess').onclick=access;$('#accessBtn').onclick=()=>$('#modal').classList.remove('hidden');$('#logoutBtn').onclick=logout;document.querySelectorAll('.role-card').forEach(b=>b.onclick=()=>{document.querySelectorAll('.role-card').forEach(x=>x.classList.remove('selected'));b.classList.add('selected');state.selectedRole=b.dataset.role;$('#accessMsg').textContent=''});$('#accessCode').addEventListener('keydown',e=>{if(e.key==='Enter')access()});document.addEventListener('change',e=>{if(e.target.id==='pRO')filterPICActivities();if(e.target.id==='pKegiatan')loadPICContext();if(e.target.id==='pPeriode'&&$('#pKegiatan')?.value)loadPICContext()});document.addEventListener('click',e=>{if(e.target.id==='savePicBtn')savePIC()});
+$('#doAccess').onclick=access;$('#accessBtn').onclick=()=>$('#modal').classList.remove('hidden');$('#logoutBtn').onclick=logout;document.querySelectorAll('.role-card').forEach(b=>b.onclick=()=>{document.querySelectorAll('.role-card').forEach(x=>x.classList.remove('selected'));b.classList.add('selected');state.selectedRole=b.dataset.role;$('#accessMsg').textContent=''});$('#accessCode').addEventListener('keydown',e=>{if(e.key==='Enter')access()});document.addEventListener('change',e=>{if(e.target.id==='pDir'){resetPICBelow_('pRO');populatePICDropdowns()}if(e.target.id==='pRO'){const rows=picOptions_().subKegiatan||[],ks=unique_(rows.filter(x=>String(x.direktorat)===$('#pDir').value&&String(x.ro)===$('#pRO').value).map(x=>x.komponen));fillSelect_($('#pKomponen'),ks,'Pilih Komponen');fillSelect_($('#pSubKegiatan'),[],'Pilih Sub Kegiatan')}if(e.target.id==='pKomponen'){const rows=picOptions_().subKegiatan||[],subs=rows.filter(x=>String(x.direktorat)===$('#pDir').value&&String(x.ro)===$('#pRO').value&&String(x.komponen)===$('#pKomponen').value);if($('#pSubKegiatan'))$('#pSubKegiatan').innerHTML='<option value="">Pilih Sub Kegiatan</option>'+subs.map(x=>`<option value="${esc(x.id_kegiatan)}">${esc(x.nama_sub_kegiatan||x.kegiatan||'-')}</option>`).join('')}if(e.target.id==='pSubKegiatan')loadPICContext();if(e.target.id==='pPeriode'&&$('#pSubKegiatan')?.value)loadPICContext();});document.addEventListener('input',e=>{if(['pTargetA','pRealA','pTargetO','pRealO'].includes(e.target.id))previewPICStatus()});document.addEventListener('click',e=>{if(e.target.id==='savePicBtn')savePIC()});
 function tick(){$('#clock').textContent=new Intl.DateTimeFormat('id-ID',{dateStyle:'full',timeStyle:'short'}).format(new Date())+' WIB'}setInterval(tick,1000);tick();try{const saved=JSON.parse(sessionStorage.getItem('abt_access')||'null');if(saved&&saved.role&&saved.code){state.selectedRole=saved.role;state.role=saved.role;state.code=saved.code;state.access=true;state.view=saved.role==='PIC'?'pic':saved.role==='PIMPINAN'?'report':'dashboard';document.body.classList.remove('locked');$('#modal').classList.add('hidden');$('#roleLabel').textContent=saved.role==='PENGENDALI'?'Tim Pengendali':saved.role==='PIMPINAN'?'Pimpinan / Laporan':'PIC Kegiatan';$('#roleSub').textContent='Akses aktif';drawNav();initialLoad();}else{$('#modal').classList.remove('hidden');drawNav();render();}}catch(e){$('#modal').classList.remove('hidden');drawNav();render();}
 window.showView=showView;window.refresh=refresh;window.confirmPIC=confirmPIC;window.deletePIC=deletePIC;window.editPIC=editPIC;window.closeEdit=closeEdit;window.openGeneric=openGeneric;window.closeGeneric=closeGeneric;
 })();
